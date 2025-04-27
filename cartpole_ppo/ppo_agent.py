@@ -25,7 +25,7 @@ from .critic import Critic
 from .environment import InvertedPendulumEnv as Environment
 from .policy_buffer import PolicyBuffer
 from .random_init import set_seed
-import .loggging
+from .logging import *
 
 def rollout_old_policy(
     state_init: torch.Tensor,
@@ -208,9 +208,9 @@ def test_agent(
         # Print the collected total and average rewards
         total_reward = sum(buffer.rewards)
         average_reward = total_reward / num_time_steps
-        print(f"Episode {episode} summ reward: {total_reward.item()}")
-        print(f"Episode {episode} average reward: {average_reward.item()}")
-        print("__________________________________")
+        logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
+        logger.info(f"Episode {episode} average reward: {average_reward.item()}")
+        logger.info("__________________________________")
 
 
 def train_cartpole_ppo(
@@ -218,6 +218,8 @@ def train_cartpole_ppo(
     num_time_steps: int = 5000,
     num_epochs: int = 500,
     *,
+    lr_actor: float = 3e-4,
+    lr_critic: float = 3e-3,
     gamma: float = 0.99,
     lam: float = 0.95,
     seed: int = 42,
@@ -237,11 +239,23 @@ def train_cartpole_ppo(
     # Optimizers:
     optimizer_actor = torch.optim.Adam(
         actor.parameters(),
-        lr=3e-4,
+        lr=lr_actor,
     )
     optimizer_critic = torch.optim.Adam(
         critic.parameters(),
-        lr=3e-4,
+        lr=lr_critic,
+    )
+    # scheduler for the actor
+    scheduler_actor = torch.optim.lr_scheduler.StepLR(
+        optimizer_actor,
+        step_size=1000,
+        gamma=0.1,
+    )
+    # scheduler for the critic
+    scheduler_critic = torch.optim.lr_scheduler.StepLR(
+        optimizer_critic,
+        step_size=1000,
+        gamma=0.1,
     )
     # Run num_iterations of rollouts and trainings 
     for episode in range(num_episodes):
@@ -285,18 +299,24 @@ def train_cartpole_ppo(
             loss.backward()
             optimizer_actor.step()
             optimizer_critic.step()
-            print(f"Episode {episode}, Epoch {epoch}: Loss: {loss.item()}")
+            # update the learning rate
+            scheduler_actor.step()
+            scheduler_critic.step()
+            # log the loss
+            if epoch % 10 == 0:
+                logger.info(f"Episode {episode}, Epoch {epoch}: Loss: {loss.item()}")
         # Test the agent
         test_agent(
             actor=actor,
             critic=critic,
             num_time_steps=num_time_steps,
         )
-    # Save the trained models
-    torch.save(actor.state_dict(), "actor.pth")
-    torch.save(critic.state_dict(), "critic.pth")
+        # Save the trained models
+        logger.info("Saving the models...")
+        torch.save(actor.state_dict(), "actor.pth")
+        torch.save(critic.state_dict(), "critic.pth")
     # Test the trained agent
-    print("Final test of the agent:")
+    logger.info("Final test of the agent:")
     test_agent(
         actor=actor,
         critic=critic,
