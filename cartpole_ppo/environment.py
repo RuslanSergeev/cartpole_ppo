@@ -1,17 +1,19 @@
 import time
-from typing import Optional, Tuple
+from typing import Optional
 import mujoco
 import mujoco.viewer
 import numpy as np
 
-from reward_functions import reward_inverted_pendulum
+from .reward_functions import reward_inverted_pendulum
 
 
 class InvertedPendulumEnv:
     def __init__(
         self,
-        model_path="",
+        model_path="mojoco_environments/inverted_pendulum.xml",
+        *,
         enable_rendering: bool = True,
+        delta_time: float = 0.01,
     ):
         self.enable_rendering = enable_rendering
         self.model_path = model_path
@@ -19,7 +21,8 @@ class InvertedPendulumEnv:
         self.target_position_updated_time = 0.0
         self.init_qpos = np.zeros(2)
         self.init_qvel = np.zeros(2)
-        self.reset_model()
+        self.reset()
+        self.set_dt(delta_time)
 
     def __del__(self):
         if self.enable_rendering:
@@ -59,10 +62,13 @@ class InvertedPendulumEnv:
     def obs(self):
         return np.concatenate([self.data.qpos, self.data.qvel]).ravel()
 
-    def reset_model(self):
-        self.data.qpos = self.init_qpos
-        self.data.qvel = self.init_qvel
-        self.data.qpos[1] = 3.14  # Set the pole to be facing down
+    def reset(self, state: Optional[np.ndarray] = None):
+        if state is None:
+            self.data.qpos = self.init_qpos
+            self.data.qvel = self.init_qvel
+        else:
+            self.data.qpos = state[:2]
+            self.data.qvel = state[2:]
         return self.obs()
 
     def set_dt(self, new_dt):
@@ -103,12 +109,9 @@ def set_random_target_position(env):
 
 
 def main(enable_rendering: bool = True):
-    env = InvertedPendulumEnv(
-        "mujoco_environments/inverted_pendulum.xml",
-        enable_rendering
-    )
+    env = InvertedPendulumEnv(enable_rendering=enable_rendering)
     env.set_dt(0.01)
-    env.reset_model()
+    env.reset()
     try:
         while env.current_time < 100:
             set_random_target_position(env)
@@ -116,6 +119,7 @@ def main(enable_rendering: bool = True):
             print(f"time: {env.current_time}, reward: {reward}, ob: {ob}, terminated: {terminated}")
     except:
         env.sync()
+
 
 if __name__ == "__main__":
     main(enable_rendering=True)

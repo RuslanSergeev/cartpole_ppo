@@ -26,6 +26,7 @@ tqdm = "*"
 pytorch-lightning = "*"
 numpy = "*"
 ipython = "*"
+loguru = "*"
 cartpole_ppo = {path = ".", editable = true}
 
 [tool.pixi.feature.torch_cpu.pypi-dependencies]

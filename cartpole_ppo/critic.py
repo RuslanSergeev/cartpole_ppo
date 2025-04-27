@@ -30,3 +30,10 @@ class Critic(nn.Module):
         x = torch.relu(self.fc2(x))
         value = self.value_head(x)
         return value
+
+    @property
+    def device(self):
+        """
+        Get the device of the model.
+        """
+        return self.fc1.weight.device
