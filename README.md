@@ -11,6 +11,17 @@ There is an existing [checkpoint of a trained agent available on Google Drive](h
 
 > ⚠️   Note: The checkpoint is provided for testing and evaluation purposes. Please do not use it for further training.
 
+## How to Run
+
+If using pixi, you can run the PPO agent with the following command:
+```bash
+pixi run -e cpu python3 -m cartpole_ppo.ppo_agent
+```
+
+If using other managers, first activate your environment, then run:
+```bash
+python3 -m cartpole_ppo.ppo_agent
+```
 
 ## Features
 
