@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Pytorch and Pickle files
+*.pt
+*.pth
+*.ckpt
+*.pkl
+
 # C extensions
 *.so
 
