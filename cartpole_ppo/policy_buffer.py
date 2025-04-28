@@ -7,7 +7,9 @@ class PolicyBuffer:
     """
 
     # Which keys are only used during rollout and should be removed
-    rollout_only_keys = {"rewards", "values", "dones"}
+    # Rewards not used in validation of the policy, but used during testing
+    # of models performance
+    rollout_only_keys = {"values", "dones"}
 
     def __init__(self):
         self.states: List[torch.Tensor] = []
@@ -65,6 +67,13 @@ class PolicyBuffer:
         """
         Concatenate another buffer to this buffer along the given dimension.
         """
+        # if current buffer is empty, just return the rhs buffer
+        if not len(self.states):
+            for key in vars(rhs):
+                val = getattr(rhs, key)
+                setattr(self, key, val)
+            return self.sanitize_()
+
         self.sanitize_()
         rhs.sanitize_()
 

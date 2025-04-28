@@ -12,7 +12,7 @@ from .actions import (
     squash_log_prob,
     get_probability_ratio,
 )
-from .returns import (
+from .return_estimators import (
     get_gae_advantages,
     get_gae_returns,
     normalize_rewards,
@@ -28,8 +28,9 @@ from .critic import Critic
 from .environment import InvertedPendulumEnv as Environment
 from .policy_buffer import PolicyBuffer
 from .logging import *
-import .hardware_manager
+from .hardware_manager import Hardware_manager
 from .checkpoints import Checkpoint
+
 
 def rollout_old_policy(
     state_init: torch.Tensor,
@@ -179,35 +180,17 @@ def get_random_state(
 
 
 def test_agent(
-    actor_checkpoint: Union[str, nn.Module],
-    critic_checkpoint: Union[str, nn.Module],
-    num_time_steps: int = 500,
+    actor: Actor,
+    critic: Critic,
+    env: Environment,
+    episode: int,
     *,
-    episode: int = 0,
-    device: Optional[torch.device] = None,
-    enable_rendering: bool = False,
+    device: torch.device = torch.device("cpu"),
+    num_time_steps: int = 500,
 ) -> None:
     """
     Test the agent in the environment.
     """
-    # Prepare the environment
-    env = Environment(enable_rendering=enable_rendering)
-    # Load the actor checkpoint
-    if isinstance(actor_checkpoint, str):
-        actor = Actor(state_dim=4, action_dim=1)
-        actor.load_state_dict(torch.load(actor_checkpoint))
-    else:
-        actor = actor_checkpoint
-    # Load the critic checkpoint
-    if isinstance(critic_checkpoint, str):
-        critic = Critic(state_dim=4)
-        critic.load_state_dict(torch.load(critic_checkpoint))
-    else:
-        critic = critic_checkpoint
-    # Move the actor and critic to the same device
-    if device is not None:
-        actor.to(device)
-        critic.to(device)
     # Set the initial state for each iteration
     state_init = torch.tensor(
         [
@@ -216,7 +199,7 @@ def test_agent(
             0.0, # x velocity
             0.0, # theta velocity
         ],
-        device=actor.device,
+        device=device,
         dtype=torch.float32,
     )
     # Rollout the old policy from state init
@@ -231,8 +214,8 @@ def test_agent(
             num_time_steps=num_time_steps,
         )
         # Print the collected total and average rewards
-        total_reward = sum(buffer.rewards)
-        average_reward = total_reward / num_time_steps
+        total_reward = buffer.rewards.sum()
+        average_reward = buffer.rewards.mean()
         logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
         logger.info(f"Episode {episode} average reward: {average_reward.item()}")
         logger.info("__________________________________")
@@ -250,6 +233,7 @@ def train_cartpole_ppo(
     lam: float = 0.95,
     model_checkpoint_path: str = "model_checkpoint.pth",
     continue_training: bool = False,
+    device: torch.device = torch.device("cpu"),
 ):
     """
     Run the PPO algorithm on the CartPole environment.
@@ -257,9 +241,9 @@ def train_cartpole_ppo(
     # Prepare the environment
     env = Environment(enable_rendering=False)
     # Actor network for policy approximation
-    actor = Actor(state_dim=4, action_dim=1).to(hardware_manager.get_device())
+    actor = Actor(state_dim=4, action_dim=1).to(device)
     # Critic network for value approximation
-    critic = Critic(state_dim=4).to(hardware_manager.get_device())
+    critic = Critic(state_dim=4).to(device)
     # Optimizers:
     optimizer_actor = Adam(actor.parameters(), lr=lr_actor)
     optimizer_critic = Adam(critic.parameters(), lr=lr_critic)
@@ -269,20 +253,22 @@ def train_cartpole_ppo(
     scheduler_critic = StepLR(optimizer_critic, step_size=100, gamma=0.9)
     # Checkpoint for saving the model
     checkpoint = Checkpoint(
-        actor=actor,
-        critic=critic,
-        actor_optimizer=optimizer_actor,
-        critic_optimizer=optimizer_critic,
-        actor_scheduler=scheduler_actor,
-        critic_scheduler=scheduler_critic,
-        checkpoint_path=model_checkpoint_path,
-        episode=0,
+        model_checkpoint_path, 
+        {
+            "episode": 0,
+            "actor": actor,
+            "critic": critic,
+            "actor_optimizer": optimizer_actor,
+            "critic_optimizer": optimizer_critic,
+            "actor_scheduler": scheduler_actor,
+            "critic_scheduler": scheduler_critic,
+        }
     )
     if continue_training:
         checkpoint.load()
 
     # Run num_iterations of rollouts and trainings
-    current_episode = checkpoint.episode
+    current_episode = checkpoint.data["episode"]
     for episode in range(current_episode, num_episodes):
         actor_old = Actor(state_dim=4, action_dim=1)
         actor_old.load_state_dict(actor.state_dict())
@@ -329,26 +315,53 @@ def train_cartpole_ppo(
                 logger.info(f"Episode {episode}, Epoch {epoch}: Loss: {loss.item()}")
         # Test the agent
         test_agent(
-            actor_checkpoint=actor,
-            critic_checkpoint=critic,
-            num_time_steps=num_time_steps,
+            actor=actor,
+            critic=critic,
+            env=env,
             episode=episode,
+            num_time_steps=num_time_steps,
         )
         # Update the learning rate
         scheduler_actor.step()
         scheduler_critic.step()
         # Save the trained models
-        checkpoint.episode = episode
-        checkpoint.save()
+        checkpoint.save(episode=episode)
 
+
+def demo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000):
+    """
+    Run a demo of the PPO agent on the CartPole environment.
+    """
+    # Load the actor and critic
+    actor = Actor(state_dim=4, action_dim=1)
+    critic = Critic(state_dim=4)
+    environment = Environment(enable_rendering=True)
+    # Load the checkpoint
+    checkpoint = Checkpoint(
+        checkpoint_path, 
+        {
+            "actor": actor,
+            "critic": critic,
+            "episode": 0,
+        }
+    )
+    checkpoint.load()
+    # Test the agent
+    test_agent(
+        actor=checkpoint.data["actor"],
+        critic=checkpoint.data["critic"],
+        env=environment,
+        episode=checkpoint.data["episode"],
+        num_time_steps=num_time_steps,
+    )
 
 if __name__ == "__main__":
-    test_agent(
-        actor_checkpoint="actor.pth",
-        critic_checkpoint="critic.pth",
-        num_time_steps=5000,
-        episode=0,
-        device=torch.device("cpu"),
-        enable_rendering=True,
-    )
-#    train_cartpole_ppo()
+    demo("model_checkpoint.pth")
+#    train_cartpole_ppo(
+#        model_checkpoint_path="model_checkpoint.pth",
+#        num_episodes=5000,
+#        num_actors=5,
+#        num_epochs=100,
+#        num_time_steps=500,
+#        device=Hardware_manager.get_device()
+#    )
