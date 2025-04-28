@@ -45,7 +45,7 @@ class InvertedPendulumEnv:
             self.data.qpos,
             self.data.qvel,
             alpha_theta=1.0,
-            alpha_theta_dot=0.01,
+            alpha_theta_dot=1e-4,
             alpha_x=0,
             alpha_x_dot=0,
         )

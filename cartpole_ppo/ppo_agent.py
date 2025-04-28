@@ -157,7 +157,7 @@ def get_random_state(
     x_dot_init_max: float = 1.0,
     theta_dot_init_min: float = -1.0,
     theta_dot_init_max: float = 1.0,
-) -> tuple:
+) -> torch.Tensor:
     """Utility function to get a random state for the cartpole environment."""
     x_init = np.random.uniform(x_init_min, x_init_max)
     theta_init = np.random.uniform(theta_init_min, theta_init_max)
@@ -166,25 +166,44 @@ def get_random_state(
         theta_dot_init_min,
         theta_dot_init_max,
     )
-    return (
+    return torch.tensor([
         x_init,
         theta_init,
         x_dot_init,
         theta_dot_init,
-    )
+    ])
 
 
 def test_agent(
-    actor: nn.Module = None,
-    critic: nn.Module = None,
+    actor_checkpoint: Union[str, nn.Module],
+    critic_checkpoint: Union[str, nn.Module],
     num_time_steps: int = 500,
+    *,
     episode: int = 0,
+    device: Optional[torch.device] = None,
+    enable_rendering: bool = False,
 ) -> None:
     """
     Test the agent in the environment.
     """
     # Prepare the environment
-    env = Environment(enable_rendering=False)
+    env = Environment(enable_rendering=enable_rendering)
+    # Load the actor checkpoint
+    if isinstance(actor_checkpoint, str):
+        actor = Actor(state_dim=4, action_dim=1)
+        actor.load_state_dict(torch.load(actor_checkpoint))
+    else:
+        actor = actor_checkpoint
+    # Load the critic checkpoint
+    if isinstance(critic_checkpoint, str):
+        critic = Critic(state_dim=4)
+        critic.load_state_dict(torch.load(critic_checkpoint))
+    else:
+        critic = critic_checkpoint
+    # Move the actor and critic to the same device
+    if device is not None:
+        actor.to(device)
+        critic.to(device)
     # Set the initial state for each iteration
     state_init = torch.tensor(
         [
@@ -198,6 +217,8 @@ def test_agent(
     )
     # Rollout the old policy from state init
     with torch.no_grad():
+        actor.eval()
+        critic.eval()
         buffer = rollout_old_policy(
             state_init=state_init,
             environment=env,
@@ -216,10 +237,10 @@ def test_agent(
 def train_cartpole_ppo(
     num_episodes: int = 5000,
     num_time_steps: int = 5000,
-    num_epochs: int = 500,
+    num_epochs: int = 1000,
     *,
     lr_actor: float = 3e-4,
-    lr_critic: float = 3e-3,
+    lr_critic: float = 0.5e-3,
     gamma: float = 0.99,
     lam: float = 0.95,
     seed: int = 42,
@@ -248,14 +269,14 @@ def train_cartpole_ppo(
     # scheduler for the actor
     scheduler_actor = torch.optim.lr_scheduler.StepLR(
         optimizer_actor,
-        step_size=1000,
-        gamma=0.1,
+        step_size=100,
+        gamma=0.9,
     )
     # scheduler for the critic
     scheduler_critic = torch.optim.lr_scheduler.StepLR(
         optimizer_critic,
-        step_size=1000,
-        gamma=0.1,
+        step_size=100,
+        gamma=0.9,
     )
     # Run num_iterations of rollouts and trainings 
     for episode in range(num_episodes):
@@ -265,16 +286,10 @@ def train_cartpole_ppo(
         critic_old = Critic(state_dim=4)
         critic_old.load_state_dict(critic.state_dict())
         critic_old.eval()
-        # Set the initial state for each iteration
-        state_init = torch.tensor(
-            get_random_state(),
-            device=actor.device,
-            dtype=torch.float32,
-        )
         # Rollout the old policy from state init
         with torch.no_grad():
             buffer = rollout_old_policy(
-                state_init=state_init,
+                state_init=get_random_state(),
                 environment=env,
                 actor=actor_old,
                 critic=critic_old,
@@ -299,31 +314,32 @@ def train_cartpole_ppo(
             loss.backward()
             optimizer_actor.step()
             optimizer_critic.step()
-            # update the learning rate
-            scheduler_actor.step()
-            scheduler_critic.step()
             # log the loss
             if epoch % 10 == 0:
                 logger.info(f"Episode {episode}, Epoch {epoch}: Loss: {loss.item()}")
         # Test the agent
         test_agent(
-            actor=actor,
-            critic=critic,
+            actor_checkpoint=actor,
+            critic_checkpoint=critic,
             num_time_steps=num_time_steps,
+            episode=episode,
         )
+        # Update the learning rate
+        scheduler_actor.step()
+        scheduler_critic.step()
         # Save the trained models
         logger.info("Saving the models...")
         torch.save(actor.state_dict(), "actor.pth")
         torch.save(critic.state_dict(), "critic.pth")
-    # Test the trained agent
-    logger.info("Final test of the agent:")
-    test_agent(
-        actor=actor,
-        critic=critic,
-        num_time_steps=num_time_steps,
-        episode=num_episodes,
-    )
 
 
 if __name__ == "__main__":
+#     test_agent(
+#         actor_checkpoint="actor.pth",
+#         critic_checkpoint="critic.pth",
+#         num_time_steps=5000,
+#         episode=0,
+#         device=torch.device("cpu"),
+#         enable_rendering=True,
+#     )
     train_cartpole_ppo()
