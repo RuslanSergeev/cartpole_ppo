@@ -9,7 +9,7 @@ The PPO agent successfully solves the CartPole environment. Experimental results
 
 There is an existing [checkpoint of a trained agent available on Google Drive](https://drive.google.com/drive/folders/1QfG9LeyMBpxtpwSlvmrwoQ0kw0fpVr55?usp=drive_link)
 
-| ⚠️   Note: The checkpoint is provided for testing and evaluation purposes. Please do not use it for further training.
+> ⚠️   Note: The checkpoint is provided for testing and evaluation purposes. Please do not use it for further training.
 
 
 ## Features
