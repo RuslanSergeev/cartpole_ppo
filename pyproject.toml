@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 authors = [
-    {name = "Ruslan Sergeev", email = "ruslan.sergeev@iceye.com"},
+    {name = "Ruslan Sergeev", email = "mybox.sergeev@gmail.com"},
 ]
 description = "A PyTorch solution for CartPole problem using PPO algorithm"
 name = "cartpole-ppo"
