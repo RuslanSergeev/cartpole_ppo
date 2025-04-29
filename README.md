@@ -11,17 +11,25 @@ The best performing model is available in [Google Drive](https://drive.google.co
 
 > ⚠️   The experiments results are being documented and will be added to this repository later this week.
 
-## How to Run
+## How to train a new model
 
 If using pixi, you can run the PPO agent with the following command:
 ```bash
-pixi run -e cpu python3 -m cartpole_ppo.ppo_agent
+pixi run -e cpu python3 main.py train <model_path>
 ```
 
 If using other managers, first activate your environment, then run:
 ```bash
-python3 -m cartpole_ppo.ppo_agent
+python3 main.py train <model_path>
 ```
+
+## How to run a demo
+
+If using pixi, you can run the PPO agent with the following command:
+```bash
+pixi run -e cpu python3 main.py demo <model_path>
+```
+
 
 ## Features
 
