@@ -23,10 +23,13 @@ from .loss_functions import (
     get_value_loss,
     combine_losses,
 )
+from .policy_buffer import (
+    PolicyBuffer,
+    BufferDataset,
+)
 from .actor import Actor
 from .critic import Critic
 from .environment import InvertedPendulumEnv as Environment
-from .policy_buffer import PolicyBuffer
 from .logging import *
 from .hardware_manager import Hardware_manager
 from .checkpoints import Checkpoint
@@ -293,16 +296,23 @@ def train_cartpole_ppo(
                 )
                 # add the current buffer to the common buffer
                 buffer.add_buffer_(current_buffer)
+        # Buffer-dataset:
+        buffer_dataset = BufferDataset(buffer, permute=True)
         # optimize for num_epochs per iteration:
         for epoch in range(num_epochs):
             # update the actor and critic
             actor.train()
             critic.train()
             # get the new policy loss
+            buffer_minibatch = buffer_dataset.get_minibatch(
+                64, 
+                device=device,
+                dtype=torch.float32,
+            )
             loss = validate_new_policy(
                 actor=actor,
                 critic=critic,
-                buffer=buffer,
+                buffer=buffer_minibatch,
             )
             # Perform optimization step
             optimizer_actor.zero_grad()
@@ -361,7 +371,7 @@ if __name__ == "__main__":
 #        model_checkpoint_path="model_checkpoint.pth",
 #        num_episodes=5000,
 #        num_actors=5,
-#        num_epochs=100,
-#        num_time_steps=500,
+#        num_epochs=50,
+#        num_time_steps=3000,
 #        device=Hardware_manager.get_device()
 #    )
