@@ -9,7 +9,7 @@ The PPO agent successfully solves the CartPole environment. Experimental results
 
 The best performing model is available in [Google Drive](https://drive.google.com/drive/folders/1QfG9LeyMBpxtpwSlvmrwoQ0kw0fpVr55?usp=drive_link)
 
-> ⚠️   The test results are being documented and will be added to this repository later today 2025.04.28.
+> ⚠️   The experiments results are being documented and will be added to this repository later this week.
 
 ## How to Run
 
