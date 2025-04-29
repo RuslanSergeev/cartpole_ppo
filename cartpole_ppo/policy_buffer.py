@@ -11,7 +11,7 @@ class PolicyBuffer:
     # of models performance
     rollout_only_keys = {"values", "dones"}
 
-    def __init__(self):
+    def __init__(self, **kwargs) -> None:
         self.states: List[torch.Tensor] = []
         self.actions_normal: List[torch.Tensor] = []
         self.actions_squashed: List[torch.Tensor] = []
@@ -21,6 +21,9 @@ class PolicyBuffer:
         self.returns: List[torch.Tensor] = []
         self.advantages: List[torch.Tensor] = []
         self.dones: List[torch.Tensor] = []
+        for key, value in kwargs.items():
+            if key in vars(self):
+                setattr(self, key, value)
 
     def _stack_if_list(self, value):
         if isinstance(value, list) and value:
@@ -89,3 +92,40 @@ class PolicyBuffer:
                 raise TypeError(f"Cannot concatenate non-tensor field '{key}'.")
 
         return self
+
+
+class BufferDataset:
+    """
+    Dataset class for the policy buffer.
+    """
+
+    def __init__(self, buffer: PolicyBuffer, permute: bool = True):
+        self.buffer = buffer
+        self.permute = permute
+        if permute:
+            self.permutation = torch.randperm(len(buffer.states))
+
+    def __len__(self):
+        return len(self.buffer.states)
+
+    def __getitem__(self, idx):
+        if self.permute:
+            idx = self.permutation[idx]
+        return PolicyBuffer(**{
+            key: getattr(self.buffer, key).flatten(0, -2)[idx]
+            for key in vars(self.buffer)
+        })
+
+    def get_minibatch(
+        self,
+        batch_size: int,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        """
+        Get a mini-batch of data from the buffer.
+        """
+        flattened_len = self.buffer.states.flatten(0, -2).shape[0]
+        indices = torch.randint(0, flattened_len, (batch_size,))
+        batch = self.__getitem__(indices)
+        return batch.sanitize_(device=device, dtype=dtype)
