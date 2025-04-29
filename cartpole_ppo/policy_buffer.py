@@ -77,8 +77,8 @@ class PolicyBuffer:
                 setattr(self, key, val)
             return self.sanitize_()
 
-        self.sanitize_()
-        rhs.sanitize_()
+        self.sanitize_(self.states.device, self.states.dtype)
+        rhs.sanitize_(self.states.device, self.states.dtype)
 
         for key in vars(self):
             rhs_val = getattr(rhs, key, None)
@@ -112,7 +112,7 @@ class BufferDataset:
         if self.permute:
             idx = self.permutation[idx]
         return PolicyBuffer(**{
-            key: getattr(self.buffer, key).flatten(0, -2)[idx]
+            key: getattr(self.buffer, key)[idx]
             for key in vars(self.buffer)
         })
 
@@ -125,7 +125,7 @@ class BufferDataset:
         """
         Get a mini-batch of data from the buffer.
         """
-        flattened_len = self.buffer.states.flatten(0, -2).shape[0]
-        indices = torch.randint(0, flattened_len, (batch_size,))
+        total_len = self.buffer.states.shape[0]
+        indices = torch.randint(0, total_len, (batch_size,))
         batch = self.__getitem__(indices)
         return batch.sanitize_(device=device, dtype=dtype)
