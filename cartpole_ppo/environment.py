@@ -38,15 +38,15 @@ class InvertedPendulumEnv:
             )
 
     def step(self, a):
-        self.data.ctrl = 3*a
+        self.data.ctrl = a
         mujoco.mj_step(self.model, self.data)
         self.sync()
         reward = reward_inverted_pendulum(
             self.data.qpos,
             self.data.qvel,
-            alpha_theta=1.0,
+            alpha_theta=1,
             alpha_theta_dot=0,
-            alpha_x=2,
+            alpha_x=0.2,
             alpha_x_dot=0,
         )
         ob = self.obs()

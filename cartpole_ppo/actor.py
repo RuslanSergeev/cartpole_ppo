@@ -13,7 +13,7 @@ class Actor(nn.Module):
         action_dim: int, 
         hidden_dim: int = 64,
         *,
-        log_std_init: float = -3.0,
+        log_std_init: float = -0.6,
         min_log_std: float = -20.0,
         max_log_std: float = 2.0,
     ):

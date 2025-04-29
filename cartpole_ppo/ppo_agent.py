@@ -219,6 +219,10 @@ def test_agent(
         # Print the collected total and average rewards
         total_reward = buffer.rewards.sum()
         average_reward = buffer.rewards.mean()
+        lr_actor = actor.optimizer.param_groups[0]["lr"]
+        lr_critic = critic.optimizer.param_groups[0]["lr"]
+        logger.info(f"Episode {episode} actor lr: {lr_actor}")
+        logger.info(f"Episode {episode} critic lr: {lr_critic}")
         logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
         logger.info(f"Episode {episode} average reward: {average_reward.item()}")
         logger.info("__________________________________")
@@ -230,8 +234,8 @@ def train_cartpole_ppo(
     num_time_steps: int = 5000,
     num_epochs: int = 1000,
     *,
-    lr_actor: float = 3e-4,
-    lr_critic: float = 0.5e-3,
+    lr_actor: float = 1e-4,
+    lr_critic: float = 0.5e-4,
     gamma: float = 0.99,
     lam: float = 0.95,
     model_checkpoint_path: str = "model_checkpoint.pth",
@@ -286,7 +290,16 @@ def train_cartpole_ppo(
             for _ in range(num_actors):
                 # rollout the old policy
                 current_buffer = rollout_old_policy(
-                    state_init=get_random_state(),
+                    state_init=torch.tensor(
+                        [
+                            0.0, # x position
+                            np.pi, # theta position
+                            0.0, # x velocity
+                            0.0, # theta velocity
+                        ],
+                        device=device,
+                        dtype=torch.float32
+                    ),
                     environment=env,
                     actor=actor_old,
                     critic=critic_old,
@@ -295,7 +308,7 @@ def train_cartpole_ppo(
                     lam=lam,
                 )
                 # add the current buffer to the common buffer
-                buffer.add_buffer_(current_buffer)
+                buffer.append_(current_buffer)
         # Buffer-dataset:
         buffer_dataset = BufferDataset(buffer, permute=True)
         # optimize for num_epochs per iteration:
@@ -305,7 +318,7 @@ def train_cartpole_ppo(
             critic.train()
             # get the new policy loss
             buffer_minibatch = buffer_dataset.get_minibatch(
-                64, 
+                500, 
                 device=device,
                 dtype=torch.float32,
             )
@@ -366,12 +379,12 @@ def demo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 50
     )
 
 if __name__ == "__main__":
-    demo("model_checkpoint.pth")
+    demo("model_test_ratio.pth")
 #    train_cartpole_ppo(
-#        model_checkpoint_path="model_checkpoint.pth",
+#        model_checkpoint_path="model_test_ratio.pth",
 #        num_episodes=5000,
-#        num_actors=5,
-#        num_epochs=50,
+#        num_actors=1,
+#        num_epochs=1000,
 #        num_time_steps=3000,
 #        device=Hardware_manager.get_device()
 #    )
