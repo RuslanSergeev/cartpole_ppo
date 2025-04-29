@@ -22,7 +22,7 @@ def get_policy_loss(
     surrogate2 = torch.clamp(
         probability_ratio, 1 - epsilon, 1 + epsilon
     ) * advantages
-    policy_loss = torch.min(surrogate1, surrogate2).mean()
+    policy_loss = -torch.min(surrogate1, surrogate2).mean()
     return policy_loss
 
 
