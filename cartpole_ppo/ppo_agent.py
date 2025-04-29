@@ -1,10 +1,9 @@
-import os
-from typing import Union, Optional
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import DataLoader
 
 from .actions import (
     sample_normal_action,
@@ -23,14 +22,11 @@ from .loss_functions import (
     get_value_loss,
     combine_losses,
 )
-from .policy_buffer import (
-    PolicyBuffer,
-    BufferDataset,
-)
+from .rl_dataset import RLDataset
 from .actor import Actor
 from .critic import Critic
 from .environment import InvertedPendulumEnv as Environment
-from .logging import *
+from .logging import logger
 from .hardware_manager import Hardware_manager
 from .checkpoints import Checkpoint
 
@@ -44,17 +40,37 @@ def rollout_old_policy(
     *,
     gamma: float = 0.99,
     lam: float = 0.95,
-):
-    buffer = PolicyBuffer()
+) -> RLDataset:
+    """
+    Rollout the old policy from state init.
+    Args:
+        state_init (torch.Tensor): Initial state of the environment.
+        environment: Environment to sample from.
+        actor (nn.Module): Actor network for policy approximation.
+        critic (nn.Module): Critic network for value approximation.
+        num_time_steps (int): Number of time steps to rollout.
+        gamma (float): Discount factor.
+        lam (float): Lambda for GAE.
+    Returns:
+        RLDataset: Dataset containing the rollout data.
+    """
     actor.eval()
     critic.eval()
+    # Create the buffers:
+    buffer = {
+        "states": [],
+        "actions_normal": [],
+        "actions_squashed": [],
+        "log_probs_squashed": [],
+        "rewards": [],
+        "values": [],
+        "dones": [],
+    }
     with torch.no_grad():
         # reset the environment
         state = environment.reset(state_init.cpu().numpy())
-        state = torch.tensor(state, device=actor.device, dtype=state_init.dtype)
-        state = torch.atleast_1d(state)
         for _ in range(num_time_steps):
-            buffer.states.append(state)
+            buffer["states"].append(state)
             # get the action distribution parameters
             action_mean, action_log_std = actor(state)
             # squeeze if the action is a scalar
@@ -75,79 +91,60 @@ def rollout_old_policy(
             state, reward, done = environment.step(
                 action_squashed.cpu().numpy()
             )
-            # Transform to tensors and ensure they are 1D
-            state = torch.tensor(state, device=actor.device, dtype=value.dtype)
-            state = torch.atleast_1d(state)
-            reward = torch.tensor(reward, device=actor.device, dtype=value.dtype)
-            reward = torch.atleast_1d(reward)
-            done = torch.tensor(done, device=actor.device, dtype=value.dtype)
-            done = torch.atleast_1d(done)
             # buffer the old policy data
-            buffer.actions_normal.append(action_normal)
-            buffer.actions_squashed.append(action_squashed)
-            buffer.log_probs_squashed.append(log_prob_squashed)
-            buffer.rewards.append(reward)
-            buffer.values.append(value)
-            buffer.dones.append(done)
+            buffer["actions_normal"].append(action_normal)
+            buffer["actions_squashed"].append(action_squashed)
+            buffer["log_probs_squashed"].append(log_prob_squashed)
+            buffer["rewards"].append(reward)
+            buffer["values"].append(value)
+            buffer["dones"].append(done)
         # criticize the last value
         value = critic(state)
-        buffer.values.append(value)
-        # calculate the advantages
-        buffer.to_tensor_(device=actor.device, dtype=value.dtype)
-        # normalize the rewards
-        buffer.rewards = normalize_rewards(buffer.rewards)
-        buffer.advantages = get_gae_advantages(
-            buffer.rewards,
-            buffer.values,
-            buffer.dones,
+        buffer["values"].append(value)
+
+        dataset = RLDataset(device=actor.device, dtype=value.dtype)
+        dataset.add(**buffer)
+        dataset.rewards = normalize_rewards(dataset.rewards)
+        dataset.advantages = get_gae_advantages(
+            dataset.rewards,
+            dataset.values,
+            dataset.dones,
             gamma=gamma,
             lam=lam,
         )
-        buffer.returns = get_gae_returns(
-            buffer.advantages,
-            buffer.values,
-        )
-    return buffer.sanitize_(device=actor.device, dtype=value.dtype)
+        dataset.returns = get_gae_returns(dataset.advantages, dataset.values)
+    return dataset
 
 
 def validate_new_policy(
     actor: nn.Module,
     critic: nn.Module,
-    buffer: PolicyBuffer,
     *,
     epsilon: float = 0.2,
+    states: torch.Tensor,
+    actions_normal: torch.Tensor,
+    actions_squashed: torch.Tensor,
+    log_probs_squashed: torch.Tensor,
+    advantages: torch.Tensor,
+    returns: torch.Tensor,
 ) -> torch.Tensor:
     """
     Evaluate the new policy using the old policy data.
     Obtains the policy probability ratios, gae advantages, and critic values.
     """
-    values = critic(buffer.states)
-    action_mean, action_log_std = actor(buffer.states)
-    _, __, entropy = sample_normal_action(
-        action_mean,
-        action_log_std,
-    )
+    values = critic(states)
+    action_mean, action_log_std = actor(states)
+    _, __, entropy = sample_normal_action(action_mean, action_log_std)
     probability_ratio = get_probability_ratio(
         action_mean,
         action_log_std,
-        buffer.actions_normal,
-        buffer.actions_squashed,
-        buffer.log_probs_squashed,
+        actions_normal,
+        actions_squashed,
+        log_probs_squashed,
     )
-    # calculate the policy loss
-    policy_loss = get_policy_loss(
-        probability_ratio,
-        buffer.advantages,
-        epsilon=epsilon,
-    )
-    # calculate the value loss
-    value_loss = get_value_loss(
-        values,
-        buffer.returns,
-    )
-    # calculate the entropy loss
+    policy_loss = get_policy_loss(probability_ratio, advantages, epsilon)
+    value_loss = get_value_loss(values, returns)
     entropy_loss = get_entropy_loss(entropy)
-    # combine the losses
     loss = combine_losses(
         policy_loss,
         value_loss,
@@ -188,28 +185,22 @@ def test_agent(
     env: Environment,
     episode: int,
     *,
-    device: torch.device = torch.device("cpu"),
     num_time_steps: int = 500,
 ) -> None:
     """
     Test the agent in the environment.
     """
     # Set the initial state for each iteration
+    qpos_qvel_init = [0.0, np.pi, 0.0, 0.0],
     state_init = torch.tensor(
-        [
-            0.0, # x position
-            np.pi, # theta position
-            0.0, # x velocity
-            0.0, # theta velocity
-        ],
-        device=device,
-        dtype=torch.float32,
+        qpos_qvel_init, device=actor.device, dtype=torch.float32
     )
+
     # Rollout the old policy from state init
     with torch.no_grad():
         actor.eval()
         critic.eval()
-        buffer = rollout_old_policy(
+        dataset = rollout_old_policy(
             state_init=state_init,
             environment=env,
             actor=actor,
@@ -217,8 +208,8 @@ def test_agent(
             num_time_steps=num_time_steps,
         )
         # Print the collected total and average rewards
-        total_reward = buffer.rewards.sum()
-        average_reward = buffer.rewards.mean()
+        total_reward = dataset.rewards.sum()
+        average_reward = dataset.rewards.mean()
         lr_actor = actor.optimizer.param_groups[0]["lr"]
         lr_critic = critic.optimizer.param_groups[0]["lr"]
         logger.info(f"Episode {episode} actor lr: {lr_actor}")
@@ -231,16 +222,18 @@ def test_agent(
 def train_cartpole_ppo(
     num_episodes: int = 5000,
     num_actors: int = 5,
-    num_time_steps: int = 5000,
-    num_epochs: int = 1000,
+    num_time_steps: int = 6000,
+    num_epochs: int = 500,
     *,
     lr_actor: float = 1e-4,
     lr_critic: float = 0.5e-4,
     gamma: float = 0.99,
     lam: float = 0.95,
+    log_any: int = 100,
+    batch_size: int = 32,
     model_checkpoint_path: str = "model_checkpoint.pth",
     continue_training: bool = False,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = Hardware_manager.get_device(),
 ):
     """
     Run the PPO algorithm on the CartPole environment.
@@ -284,22 +277,18 @@ def train_cartpole_ppo(
         critic_old.load_state_dict(critic.state_dict())
         critic_old.eval()
         # set up common buffer for all actors
-        buffer = PolicyBuffer()
+        dataset = RLDataset(device=device, dtype=torch.float32)
         # Rollout the old policy from state init
+        qpos_qvel_init = [0.0, np.pi, 0.0, 0.0],
+        state_init=torch.tensor(
+            qpos_qvel_init, device=device, dtype=torch.float32
+        )
+
         with torch.no_grad():
             for _ in range(num_actors):
                 # rollout the old policy
                 current_buffer = rollout_old_policy(
-                    state_init=torch.tensor(
-                        [
-                            0.0, # x position
-                            np.pi, # theta position
-                            0.0, # x velocity
-                            0.0, # theta velocity
-                        ],
-                        device=device,
-                        dtype=torch.float32
-                    ),
+                    state_init=state_init,
                     environment=env,
                     actor=actor_old,
                     critic=critic_old,
@@ -308,40 +297,27 @@ def train_cartpole_ppo(
                     lam=lam,
                 )
                 # add the current buffer to the common buffer
-                buffer.append_(current_buffer)
-        # Buffer-dataset:
-        buffer_dataset = BufferDataset(buffer, permute=True)
+                dataset.add(**current_buffer.data)
+
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         # optimize for num_epochs per iteration:
         for epoch in range(num_epochs):
-            # update the actor and critic
-            actor.train()
-            critic.train()
-            # get the new policy loss
-            buffer_minibatch = buffer_dataset.get_minibatch(
-                500, 
-                device=device,
-                dtype=torch.float32,
-            )
-            loss = validate_new_policy(
-                actor=actor,
-                critic=critic,
-                buffer=buffer_minibatch,
-            )
-            # Perform optimization step
-            optimizer_actor.zero_grad()
-            optimizer_critic.zero_grad()
-            loss.backward()
-            optimizer_actor.step()
-            optimizer_critic.step()
-            # log the loss
-            if epoch % 10 == 0:
-                logger.info(f"Episode {episode}, Epoch {epoch}: Loss: {loss.item()}")
+            for batch_idx, batch in enumerate(dataloader):
+                actor.train()
+                critic.train()
+                # get the new policy loss
+                loss = validate_new_policy(actor, critic, **batch)
+                # Perform optimization step
+                optimizer_actor.zero_grad()
+                optimizer_critic.zero_grad()
+                loss.backward()
+                optimizer_actor.step()
+                optimizer_critic.step()
+                # log the loss
+                if batch_idx % log_any == 0:
+                    logger.info(f"{episode}/{epoch}/{batch_idx}: Loss: {loss.item()}")
         # Test the agent
-        test_agent(
-            actor=actor,
-            critic=critic,
-            env=env,
-            episode=episode,
+        test_agent(actor, critic, env, episode,
             num_time_steps=num_time_steps,
         )
         # Update the learning rate
@@ -351,13 +327,13 @@ def train_cartpole_ppo(
         checkpoint.save(episode=episode)
 
 
-def demo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000):
+def demo_cartpole_ppo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000):
     """
     Run a demo of the PPO agent on the CartPole environment.
     """
     # Load the actor and critic
-    actor = Actor(state_dim=4, action_dim=1)
-    critic = Critic(state_dim=4)
+    actor = Actor(state_dim=4, action_dim=1).to(device=Hardware_manager.get_device())
+    critic = Critic(state_dim=4).to(device=Hardware_manager.get_device())
     environment = Environment(enable_rendering=True)
     # Load the checkpoint
     checkpoint = Checkpoint(
@@ -377,14 +353,3 @@ def demo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 50
         episode=checkpoint.data["episode"],
         num_time_steps=num_time_steps,
     )
-
-if __name__ == "__main__":
-    demo("model_test_ratio.pth")
-#    train_cartpole_ppo(
-#        model_checkpoint_path="model_test_ratio.pth",
-#        num_episodes=5000,
-#        num_actors=1,
-#        num_epochs=1000,
-#        num_time_steps=3000,
-#        device=Hardware_manager.get_device()
-#    )

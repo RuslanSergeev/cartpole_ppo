@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from typing import overload
 
 class Actor(nn.Module):
     """
@@ -13,11 +12,15 @@ class Actor(nn.Module):
         action_dim: int, 
         hidden_dim: int = 64,
         *,
-        log_std_init: float = -0.6,
+        action_bias: float = 0.0,
+        action_scale: float = 3.0,
+        log_std_init: float = -1.0,
         min_log_std: float = -20.0,
         max_log_std: float = 2.0,
     ):
         super(Actor, self).__init__()
+        self.action_bias = action_bias
+        self.action_scale = action_scale
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
         self.fc1 = nn.Linear(state_dim, hidden_dim)
@@ -31,6 +34,7 @@ class Actor(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         mu = torch.tanh(self.mu_head(x))
+        mu = mu * self.action_scale + self.action_bias
         log_std = torch.clamp(
             self.log_std_head, 
             min=self.min_log_std, 

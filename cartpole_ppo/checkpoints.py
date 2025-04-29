@@ -8,7 +8,18 @@ class Checkpoint:
     Checkpoint class to manage saving and loading of model states.
     """
 
-    def __init__(self, checkpoint_path: str, checkpoint_data: Dict[str, Any]) -> None:
+    def __init__(
+        self, 
+        checkpoint_path: str, 
+        checkpoint_data: Dict[str, Any]
+    ) -> None:
+        """
+        Initialize the Checkpoint class.
+        Args:
+            checkpoint_path (str): Path to save the checkpoint.
+            checkpoint_data (Dict[str, Any]): Data to be saved in the checkpoint,
+                on the save method.
+        """
         self.path = checkpoint_path
         self.data = checkpoint_data
 

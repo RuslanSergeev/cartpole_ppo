@@ -1,8 +1,8 @@
+from typing import Dict
 import torch
-from torch import Dataset
+from torch.utils.data import Dataset
 
-
-class DatasetPPO(Dataset):
+class RLDataset(Dataset):
     """
     A class to manage a buffer of data for reinforcement learning.
     """
@@ -12,12 +12,12 @@ class DatasetPPO(Dataset):
         device: torch.device = torch.device("cpu"),
         dtype: torch.dtype = torch.float32,
     ):
-        super(DatasetPPO, self).__init__()
+        super(RLDataset, self).__init__()
         self.device = device
         self.dtype = dtype
-        self.buffer = {}
+        self.data = {}
         
-    def add(self, **rhs) -> "DatasetPPO":
+    def add(self, **rhs) -> "RLDataset":
         """
         Add data to the buffer, concatenating tensors along the first dimension.
         Args:
@@ -32,29 +32,44 @@ class DatasetPPO(Dataset):
             value = torch.atleast_2d(value)
             # Flatten all the dimensions except the last one:
             value = value.flatten(start_dim=0, end_dim=-2)
-            if not key in self.buffer:
+            if not key in self.data:
                 # If the key does not exist in the buffer, create it
-                self.buffer[key] = value
+                self.data[key] = value
             else:
                 # If the key exists, concatenate the new value to the existing tensor
-                self.buffer[key] = torch.cat([self.buffer[key], value], dim=0)
+                self.data[key] = torch.cat([self.data[key], value], dim=0)
             # Ensure all tensors are on the same device and dtype
             # ! Also detaches from the computation graph
-            self.buffer[key] = self.buffer[key].to(device=self.device, dtype=self.dtype).detach()
+            self.data[key] = self.data[key].to(
+                device=self.device, dtype=self.dtype
+            ).detach()
 
         return self
+
+    def __getattr__(self, key):
+        """
+        Get an item from the buffer.
+        Args:
+            key (str): The key to get from the buffer.
+        Returns:
+            torch.Tensor: The tensor associated with the key.
+        """
+        if key in self.data:
+            return self.data[key]
+        else:
+            raise AttributeError(f"Key '{key}' not found in buffer.")
 
     def __len__(self):
         """
         Get the length of the buffer.
         """
-        if not self.buffer: 
+        if not self.data: 
             return 0
         else:
-            key = list(self.buffer.keys())[0]
-            return len(self.buffer[key])
+            key = list(self.data.keys())[0]
+            return len(self.data[key])
 
-    def __getitem__(self, indices) -> "DatasetPPO":
+    def __getitem__(self, indices) -> Dict[str, torch.Tensor]:
         """
         Get a mini-batch of data from the buffer.
         Args:
@@ -63,25 +78,6 @@ class DatasetPPO(Dataset):
             DatasetPPO: A new DatasetPPO object containing the sampled data.
         """
         sampled_data = {}
-        for key, value in self.buffer.items():
+        for key, value in self.data.items():
             sampled_data[key] = value[indices]
-        return DatasetPPO(device=self.device, dtype=self.dtype).add(**sampled_data)
-
-    def get_minibatch(
-        self,
-        batch_size: int,
-    ) -> "DatasetPPO":
-        """
-        Get a mini-batch of data from the buffer.
-        Args:
-            batch_size (int): The size of the mini-batch to retrieve.
-        Returns:
-            DatasetPPO: A new DatasetPPO object containing the mini-batch.
-            If batch_size is less than or equal to 0, return the original buffer.
-        """
-        if batch_size <= 0:
-            return self
-        if batch_size > len(self):
-            raise ValueError("Batch size exceeds buffer length.")
-        indices = torch.randint(0, len(self), (batch_size,))
-        return self.__getitem__(indices)
+        return sampled_data
