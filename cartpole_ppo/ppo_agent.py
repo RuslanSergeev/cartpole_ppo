@@ -72,9 +72,12 @@ def rollout_old_policy(
         for _ in range(num_time_steps):
             buffer["states"].append(state)
             # get the action distribution parameters
-            action_mean, action_log_std = actor(state)
+            tensor_state = torch.Tensor(
+                state, device=actor.device
+            ).unsqueeze(0)
+            action_mean, action_log_std = actor(tensor_state)
             # squeeze if the action is a scalar
-            value = critic(state)
+            value = critic(tensor_state)
             # sample a normally distributed action
             action_normal, log_prob_normal, _ = sample_normal_action(
                 action_mean,

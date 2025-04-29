@@ -67,8 +67,8 @@ class InvertedPendulumEnv:
             self.data.qpos = self.init_qpos
             self.data.qvel = self.init_qvel
         else:
-            self.data.qpos = state[:2]
-            self.data.qvel = state[2:]
+            self.data.qpos = state.ravel()[:2]
+            self.data.qvel = state.ravel()[2:]
         return self.obs()
 
     def set_dt(self, new_dt):
