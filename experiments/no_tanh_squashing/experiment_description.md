@@ -62,7 +62,7 @@ Episode 665 max reward: 1.554492712020874
 
 ## Assets
 
-![Screencast](https://drive.google.com/file/d/1v8fcEYf9VXLdeCdUKv3ZZFdtJ7vH8QZ_/view?usp=sharing)
-[Logs](https://drive.google.com/file/d/1sfWzmVbj71xs75nCpT9PEgX6iNH7Fm8y/view?usp=sharing)
+[Screencast](https://drive.google.com/file/d/1v8fcEYf9VXLdeCdUKv3ZZFdtJ7vH8QZ_/view?usp=sharing)  
+[Logs](https://drive.google.com/file/d/1sfWzmVbj71xs75nCpT9PEgX6iNH7Fm8y/view?usp=sharing)  
 
 
