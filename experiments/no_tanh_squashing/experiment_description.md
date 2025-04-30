@@ -64,5 +64,5 @@ Episode 665 max reward: 1.554492712020874
 
 [Screencast](https://drive.google.com/file/d/1v8fcEYf9VXLdeCdUKv3ZZFdtJ7vH8QZ_/view?usp=sharing)  
 [Logs](https://drive.google.com/file/d/1sfWzmVbj71xs75nCpT9PEgX6iNH7Fm8y/view?usp=sharing)  
-
+[Model checkpoint](https://drive.google.com/file/d/1_cJyG92GSotMXA93aYiIVC-igGZMF6pB/view?usp=drive_link)
 
