@@ -59,7 +59,6 @@ class RLDataset(Dataset):
         else:
             raise AttributeError(f"Key '{key}' not found in buffer.")
 
-
     def __len__(self):
         """
         Get the length of the buffer.

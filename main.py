@@ -20,7 +20,8 @@ def train(checkpoint_path: str):
 
 def demo(checkpoint_path: str):
     demo_cartpole_ppo(
-        checkpoint_path=checkpoint_path, num_time_steps=300
+        checkpoint_path=checkpoint_path, 
+        num_time_steps=18000
     )
 
 
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     if command == "train":
         train(model_path)
     elif command == "demo":
-        demo_cartpole_ppo(model_path)
+        demo(model_path)
     else:
         print("Invalid command. Use 'train' or 'demo'.")
 
