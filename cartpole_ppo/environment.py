@@ -10,7 +10,7 @@ from .reward_functions import reward_inverted_pendulum
 class InvertedPendulumEnv:
     def __init__(
         self,
-        model_path="mojoco_environments/inverted_pendulum.xml",
+        model_path="mujoco_environments/inverted_pendulum.xml",
         *,
         enable_rendering: bool = True,
         delta_time: float = 0.01,
@@ -51,6 +51,7 @@ class InvertedPendulumEnv:
         )
         ob = self.obs()
         terminated = bool(not np.isfinite(ob).all())
+        # If rendering, ensure real-time simulation
         if self.enable_rendering:
             time.sleep(self.model.opt.timestep)
         return ob, reward, terminated
