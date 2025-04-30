@@ -9,11 +9,11 @@ from cartpole_ppo.hardware_manager import Hardware_manager
 def train(checkpoint_path: str):
     train_cartpole_ppo(
         model_checkpoint_path=checkpoint_path,
-        num_episodes=5,#5000,
-        num_actors=1,#5,
-        num_epochs=10,#100,
-        num_time_steps=300,#6000,
-        log_any=10,#100,
+        num_episodes=5000,
+        num_actors=5,
+        num_epochs=10,
+        num_time_steps=6000,
+        log_any=100,
         device=Hardware_manager.get_device()
     )
 

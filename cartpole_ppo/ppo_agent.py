@@ -7,8 +7,6 @@ from torch.utils.data import DataLoader
 
 from .actions import (
     sample_normal_action,
-    squash_action,
-    squash_log_prob,
     get_probability_ratio,
 )
 from .return_estimators import (
@@ -59,9 +57,8 @@ def rollout_old_policy(
     # Create the buffers:
     buffer = {
         "states": [],
-        "actions_normal": [],
-        "actions_squashed": [],
-        "log_probs_squashed": [],
+        "actions": [],
+        "log_probs": [],
         "rewards": [],
         "values": [],
         "dones": [],
@@ -70,7 +67,7 @@ def rollout_old_policy(
         # reset the environment
         state = environment.reset(state_init.cpu().numpy())
         for _ in range(num_time_steps):
-            buffer["states"].append(state)
+            buffer["states"].append([state])
             # get the action distribution parameters
             tensor_state = torch.Tensor(
                 state, device=actor.device
@@ -79,57 +76,55 @@ def rollout_old_policy(
             # squeeze if the action is a scalar
             value = critic(tensor_state)
             # sample a normally distributed action
-            action_normal, log_prob_normal, _ = sample_normal_action(
+            action, log_prob, _ = sample_normal_action(
                 action_mean,
                 action_log_std,
             )
-            # squash to an action, the environment can understand
-            action_squashed = squash_action(action_normal)
-            # correct the log probability
-            log_prob_squashed = squash_log_prob(
-                log_prob_normal,
-                action_squashed,
-            )
             # sample the environment
             state, reward, done = environment.step(
-                action_squashed.cpu().numpy()
+                action.cpu().numpy()
             )
             # buffer the old policy data
-            buffer["actions_normal"].append(action_normal)
-            buffer["actions_squashed"].append(action_squashed)
-            buffer["log_probs_squashed"].append(log_prob_squashed)
-            buffer["rewards"].append(reward)
-            buffer["values"].append(value)
-            buffer["dones"].append(done)
+            buffer["actions"].append([action])
+            buffer["log_probs"].append([log_prob])
+            buffer["rewards"].append([reward])
+            buffer["values"].append([value])
+            buffer["dones"].append([done])
         # criticize the last value
-        value = critic(state)
-        buffer["values"].append(value)
+        tensor_state = torch.Tensor(
+            state, device=actor.device
+        ).unsqueeze(0)
+        value = critic(tensor_state)
+        buffer["values"].append([value])
 
         dataset = RLDataset(device=actor.device, dtype=value.dtype)
         dataset.add(**buffer)
-        dataset.rewards = normalize_rewards(dataset.rewards)
-        dataset.advantages = get_gae_advantages(
+        dataset.data["rewards"] = normalize_rewards(dataset.rewards)
+        dataset.data["advantages"] = get_gae_advantages(
             dataset.rewards,
             dataset.values,
             dataset.dones,
             gamma=gamma,
             lam=lam,
         )
-        dataset.returns = get_gae_returns(dataset.advantages, dataset.values)
+        dataset.data["returns"] = get_gae_returns(dataset.advantages, dataset.values)
+        # Remove the last value from the dataset, used only for 
+        # calculating the returns and advantages
+        dataset.data["values"] = dataset.values[:-1]
     return dataset
 
 
 def validate_new_policy(
     actor: nn.Module,
     critic: nn.Module,
-    *,
+    *_,
     epsilon: float = 0.2,
     states: torch.Tensor,
-    actions_normal: torch.Tensor,
-    actions_squashed: torch.Tensor,
-    log_probs_squashed: torch.Tensor,
+    actions: torch.Tensor,
+    log_probs: torch.Tensor,
     advantages: torch.Tensor,
     returns: torch.Tensor,
+    **__,
 ) -> torch.Tensor:
     """
     Evaluate the new policy using the old policy data.
@@ -141,9 +136,8 @@ def validate_new_policy(
     probability_ratio = get_probability_ratio(
         action_mean,
         action_log_std,
-        actions_normal,
-        actions_squashed,
-        log_probs_squashed,
+        actions,
+        log_probs,
     )
     policy_loss = get_policy_loss(probability_ratio, advantages, epsilon)
     value_loss = get_value_loss(values, returns)
@@ -213,10 +207,6 @@ def test_agent(
         # Print the collected total and average rewards
         total_reward = dataset.rewards.sum()
         average_reward = dataset.rewards.mean()
-        lr_actor = actor.optimizer.param_groups[0]["lr"]
-        lr_critic = critic.optimizer.param_groups[0]["lr"]
-        logger.info(f"Episode {episode} actor lr: {lr_actor}")
-        logger.info(f"Episode {episode} critic lr: {lr_critic}")
         logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
         logger.info(f"Episode {episode} average reward: {average_reward.item()}")
         logger.info("__________________________________")
@@ -326,6 +316,8 @@ def train_cartpole_ppo(
         # Update the learning rate
         scheduler_actor.step()
         scheduler_critic.step()
+        logger.info(f"lr_actor={scheduler_actor.get_last_lr()}" )
+        logger.info(f"lr_critic={scheduler_critic.get_last_lr()}")
         # Save the trained models
         checkpoint.save(episode=episode)
 

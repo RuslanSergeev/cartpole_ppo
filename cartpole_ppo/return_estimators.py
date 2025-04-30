@@ -22,26 +22,22 @@ def get_gae_advantages(
     Returns:
         advantages (torch.Tensor): The calculated advantages.
     """
-    rewards.squeeze_(-1)
-    values.squeeze_(-1)
-    ends.squeeze_(-1)
-
-    next_values = values[..., 1:]
-    values = values[..., :-1]
+    next_values = values[1:]
+    values = values[:-1]
     
     masks = 1 - ends
     deltas = rewards + gamma * next_values * masks - values
 
     advantages = torch.zeros_like(rewards)
-    rolling_advantage = torch.zeros_like(rewards[..., 0])
-    for t in reversed(range(rewards.shape[-1])):
-        rolling_advantage = deltas[..., t] + gamma * lam * rolling_advantage * masks[..., t]
-        advantages[..., t] = rolling_advantage
+    rolling_advantage = torch.zeros_like(rewards[0])
+    for t in reversed(range(len(rewards))):
+        rolling_advantage = deltas[t] + gamma * lam * rolling_advantage * masks[t]
+        advantages[t] = rolling_advantage
 
-    return advantages.unsqueeze_(-1)
+    return advantages
 
 
-def get_markov_returns(
+def get_monte_carlo_returns(
     rewards: torch.Tensor,
     ends: torch.Tensor,
     *,
@@ -61,17 +57,14 @@ def get_markov_returns(
     Returns:
         returns (torch.Tensor): The calculated total values.
     """
-    rewards.squeeze_(-1)
-    ends.squeeze_(-1)
-
     masks = 1 - ends
     returns = torch.zeros_like(rewards)
-    rolling_returns = torch.zeros_like(rewards[..., 0])
-    for t in reversed(range(rewards.shape[-1])):
-        rolling_return = rewards[..., t] + gamma * rolling_returns * masks[..., t]
-        returns[..., t] = rolling_return
+    rolling_returns = torch.zeros_like(rewards[0])
+    for t in reversed(range(len(rewards))):
+        rolling_return = rewards[t] + gamma * rolling_returns * masks[t]
+        returns[t] = rolling_return
 
-    return returns.unsqueeze_(-1)
+    return returns
 
 
 def normalize_rewards(rewards: torch.Tensor) -> torch.Tensor:
@@ -84,12 +77,11 @@ def normalize_rewards(rewards: torch.Tensor) -> torch.Tensor:
     Returns:
         rewards (torch.Tensor): Normalized rewards.
     """
-    rewards.squeeze_(-1)
     mean = rewards.mean()
     std = rewards.std()
     normalized_rewards = (rewards - mean) / (std + 1e-8)
 
-    return normalized_rewards.unsqueeze_(-1)
+    return normalized_rewards
 
 
 def get_bootstrap_returns(
@@ -115,15 +107,12 @@ def get_bootstrap_returns(
     Returns:
         np.ndarray: The calculated bootstrap returns.
     """
-    rewards.squeeze_(-1)
-    values.squeeze_(-1)
-    ends.squeeze_(-1)
 
     masks = 1 - ends
-    next_values = values[..., 1:]
+    next_values = values[1:]
     returns = rewards + gamma * next_values * masks
 
-    return returns.unsqueeze_(-1)
+    return returns
 
 
 def get_gae_returns(
@@ -143,9 +132,5 @@ def get_gae_returns(
     Returns:
         returns (torch.Tensor): The calculated advantage returns. 
     """
-    advantages.squeeze_(-1)
-    values.squeeze_(-1)
-
-    returns = advantages + values[..., :-1]
-
-    return returns.unsqueeze_(-1)
+    returns = advantages + values[:-1]
+    return returns
