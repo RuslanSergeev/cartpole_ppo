@@ -11,6 +11,10 @@ Experiments logs are available at [Google Drive](https://drive.google.com/drive/
 
 > ⚠️   The experiments results are being documented and will be added to this repository later this week.
 
+## Experiments results
+
+The experiment results can be found [here](experiments)
+
 ## How to train a new model
 
 If using pixi, you can run the PPO agent with the following command:
