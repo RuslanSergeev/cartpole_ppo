@@ -1,6 +1,7 @@
 import sys
 from cartpole_ppo.ppo_agent import (
     train_cartpole_ppo,
+    test_agent,
     demo_cartpole_ppo,
 )
 from cartpole_ppo.hardware_manager import Hardware_manager
@@ -21,8 +22,18 @@ def train(checkpoint_path: str):
 def demo(checkpoint_path: str):
     demo_cartpole_ppo(
         checkpoint_path=checkpoint_path, 
-        num_time_steps=18000
+        num_time_steps=18000,
+        enable_rendering=True
     )
+
+
+def test(checkpoint_path: str):
+    demo_cartpole_ppo(
+        checkpoint_path=checkpoint_path, 
+        num_time_steps=18000,
+        enable_rendering=False
+    )
+    return True
 
 
 if __name__ == "__main__":
@@ -35,6 +46,8 @@ if __name__ == "__main__":
         train(model_path)
     elif command == "demo":
         demo(model_path)
+    elif command == "test":
+        test(model_path)
     else:
         print("Invalid command. Use 'train' or 'demo'.")
 

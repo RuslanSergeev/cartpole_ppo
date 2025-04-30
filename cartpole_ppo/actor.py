@@ -7,9 +7,9 @@ class Actor(nn.Module):
     """
 
     def __init__(
-        self, 
-        state_dim: int, 
-        action_dim: int, 
+        self,
+        state_dim: int = 4,
+        action_dim: int = 1,
         hidden_dim: int = 64,
         *,
         action_bias: float = 0.0,

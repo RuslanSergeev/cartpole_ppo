@@ -207,8 +207,10 @@ def test_agent(
         # Print the collected total and average rewards
         total_reward = dataset.rewards.sum()
         average_reward = dataset.rewards.mean()
+        max_reward = dataset.rewards.max()
         logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
         logger.info(f"Episode {episode} average reward: {average_reward.item()}")
+        logger.info(f"Episode {episode} max reward: {max_reward.item()}")
         logger.info("__________________________________")
 
 
@@ -322,14 +324,14 @@ def train_cartpole_ppo(
         checkpoint.save(episode=episode)
 
 
-def demo_cartpole_ppo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000):
+def demo_cartpole_ppo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000, enable_rendering: bool = True):
     """
     Run a demo of the PPO agent on the CartPole environment.
     """
     # Load the actor and critic
     actor = Actor(state_dim=4, action_dim=1).to(device=Hardware_manager.get_device())
     critic = Critic(state_dim=4).to(device=Hardware_manager.get_device())
-    environment = Environment(enable_rendering=True)
+    environment = Environment(enable_rendering=enable_rendering)
     # Load the checkpoint
     checkpoint = Checkpoint(
         checkpoint_path, 

@@ -3,7 +3,11 @@ from torch import nn
 
 class Critic(nn.Module):
 
-    def __init__(self, state_dim: int, hidden_dim: int = 64):
+    def __init__(
+        self,
+        state_dim: int = 4,
+        hidden_dim: int = 64
+    ):
         """
         Initialize the Critic network.
 
