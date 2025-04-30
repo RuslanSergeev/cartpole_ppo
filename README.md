@@ -1,4 +1,4 @@
-# Cartpole PPO — From-Scratch PPO Implementation in PyTorch
+# CartPole PPO
 
 This repository contains a vanilla PyTorch implementation of the Proximal Policy Optimization (PPO) algorithm, applied to the classic CartPole environment.
 
@@ -11,11 +11,11 @@ Experiments logs are available at [Google Drive](https://drive.google.com/drive/
 
 > ⚠️   The experiments results are being documented and will be added to this repository later this week.
 
-## Experiments results
+## 🔬 Experiments results
 
 The experiment results can be found [here](experiments)
 
-## How to train a new model
+## 🏆 How to train a new model
 
 If using pixi, you can run the PPO agent with the following command:
 ```bash
@@ -27,7 +27,7 @@ If using other managers, first activate your environment, then run:
 python3 main.py train <model_path>
 ```
 
-## How to run a demo
+## 🏃 How to run a demo
 
 If using pixi, you can run the PPO agent with the following command:
 ```bash
@@ -35,14 +35,14 @@ pixi run -e cpu python3 main.py demo <model_path>
 ```
 
 
-## Features
+## ✨ Features
 
 - PPO clipped surrogate objective
 - Separate actor and critic networks
 - Training from scratch, no RL libraries
 - Clean, minimal PyTorch codebase
 
-## TODO
+## 🌱 TODO
 
 - Reward shaping for better performance
 - Add detailed experiment results and plots
