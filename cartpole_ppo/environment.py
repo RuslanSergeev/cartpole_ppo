@@ -1,10 +1,13 @@
 import time
-from typing import Optional
+from typing import Optional, Callable, Any
 import mujoco
 import mujoco.viewer
 import numpy as np
+from torch import nn
 
+from .state_generators import get_pendulum_down_state
 from .reward_functions import reward_inverted_pendulum
+from .ppo_agent import test_agent
 
 
 class InvertedPendulumEnv:
@@ -12,15 +15,17 @@ class InvertedPendulumEnv:
         self,
         model_path="mujoco_environments/inverted_pendulum.xml",
         *,
+        initial_state_generator:Callable[..., np.ndarray] = get_pendulum_down_state,
+        reward_generator:Callable[..., float] = reward_inverted_pendulum,
         enable_rendering: bool = True,
         delta_time: float = 0.01,
     ):
+        self.initial_state_generator = initial_state_generator
+        self.reward_generator = reward_generator
         self.enable_rendering = enable_rendering
         self.model_path = model_path
         self.init_mujoco()
         self.target_position_updated_time = 0.0
-        self.init_qpos = np.zeros(2)
-        self.init_qvel = np.zeros(2)
         self.reset()
         self.set_dt(delta_time)
 
@@ -61,12 +66,17 @@ class InvertedPendulumEnv:
             self.viewer.sync()
 
     def obs(self):
-        return np.concatenate([self.data.qpos, self.data.qvel]).ravel()
+        qpos = self.data.qpos
+        qvel = self.data.qvel
+        # Limit the theta observation to the range [-pi, pi]
+        qpos[1] = np.arctan2(np.sin(qpos[1]), np.cos(qpos[1]))
+        return np.concatenate([qpos, qvel]).ravel()
 
     def reset(self, state: Optional[np.ndarray] = None):
         if state is None:
-            self.data.qpos = self.init_qpos
-            self.data.qvel = self.init_qvel
+            state_init = self.initial_state_generator()
+            self.data.qpos = state_init.ravel()[:2]
+            self.data.qvel = state_init.ravel()[2:]
         else:
             self.data.qpos = state.ravel()[:2]
             self.data.qvel = state.ravel()[2:]
@@ -103,10 +113,29 @@ class InvertedPendulumEnv:
         return self.data.time
 
 
-def set_random_target_position(env):
-    if env.current_time - env.target_position_updated_time> 5:
-        target_pos = [np.random.rand() - 0.5, 0, 0.6]
-        env.set_target_position(target_pos)
+def demo_cartpole_ppo(
+    actor: nn.Module,
+    critic: nn.Module,
+    num_time_steps: int = 5000, 
+    enable_rendering: bool = True,
+):
+    """
+    Run a demo of the PPO agent on the CartPole environment.
+    """
+    # Load the actor and critic
+    environment = InvertedPendulumEnv(
+        enable_rendering=enable_rendering,
+        initial_state_generator=get_pendulum_down_state,
+    )
+    environment.reset()
+    # Test the agent
+    test_agent(
+        actor=actor,
+        critic=critic,
+        env=environment,
+        num_time_steps=num_time_steps,
+    )
+
 
 
 def main(enable_rendering: bool = True):
@@ -115,7 +144,9 @@ def main(enable_rendering: bool = True):
     env.reset()
     try:
         while env.current_time < 100:
-            set_random_target_position(env)
+            if env.current_time > env.target_position_updated_time + 5:
+                target_pos = [np.random.rand() - 0.5, 0, 0.6]
+                env.set_target_position(target_pos)
             ob, reward, terminated = env.step(0)
             print(f"time: {env.current_time}, reward: {reward}, ob: {ob}, terminated: {terminated}")
     except:

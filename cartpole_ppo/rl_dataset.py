@@ -1,6 +1,7 @@
 from typing import Dict
 import torch
 from torch.utils.data import Dataset
+from .convert_to_tensor import convert_to_tensor
 
 class RLDataset(Dataset):
     """
@@ -25,25 +26,39 @@ class RLDataset(Dataset):
                 Non tensor values or lists of tensors are converted to tensors.
         """
         for key, value in rhs.items():
-            if not isinstance(value, torch.Tensor):
-                # Single non-tensor value
-                value = torch.tensor(value)
-            # Tensor value, ensure it is at least 2D
-            value = torch.atleast_2d(value)
-            # Flatten all the dimensions except the last one:
-            value = value.flatten(start_dim=0, end_dim=-2)
+            # Convert the value to a tensor if it is not already
+            value = convert_to_tensor(value, device=self.device, dtype=self.dtype)
             if not key in self.data:
                 # If the key does not exist in the buffer, create it
                 self.data[key] = value
             else:
                 # If the key exists, concatenate the new value to the existing tensor
                 self.data[key] = torch.cat([self.data[key], value], dim=0)
-            # Ensure all tensors are on the same device and dtype
-            # ! Also detaches from the computation graph
-            self.data[key] = self.data[key].to(
-                device=self.device, dtype=self.dtype
-            ).detach()
+        # Move the buffer to the specified device and dtype
+        self.to(device=self.device, dtype=self.dtype)
+        return self
 
+    def to(self, device: torch.device, dtype: torch.dtype) -> "RLDataset":
+        """
+        Move the buffer to a different device and dtype.
+        Args:
+            device (torch.device): The device to move the buffer to.
+            dtype (torch.dtype): The dtype to convert the buffer to.
+        Returns:
+            RLDataset: The modified dataset.
+        """
+        for key in self.data:
+            self.data[key] = self.data[key].to(device=device, dtype=dtype)
+        return self
+
+    def detach(self) -> "RLDataset":
+        """
+        Detach the tensors in the buffer from the computation graph.
+        Returns:
+            RLDataset: The modified dataset.
+        """
+        for key in self.data:
+            self.data[key] = self.data[key].detach()
         return self
 
     def __getattr__(self, key):
@@ -58,6 +73,22 @@ class RLDataset(Dataset):
             return self.data[key]
         else:
             raise AttributeError(f"Key '{key}' not found in buffer.")
+
+    def __setattr__(self, key, value):
+        """
+        Set an item in the buffer.
+        Args:
+            key (str): The key to set in the buffer.
+            value (torch.Tensor): The tensor to set.
+        """
+        self_keys = ["data", "device", "dtype"]
+        if key in self_keys:
+            super().__setattr__(key, value)
+        else:
+            value = convert_to_tensor(
+                value, device=self.device, dtype=self.dtype
+            )
+            self.data[key] = value
 
     def __len__(self):
         """

@@ -33,10 +33,10 @@ def reward_inverted_pendulum(
     Returns:
         float: The calculated reward.
     """
-    theta = qpos[1]
-    theta_dot = qvel[1]
     x = qpos[0]
+    theta = qpos[1]
     x_dot = qvel[0]
+    theta_dot = qvel[1]
 
     reward = (
         alpha_theta * np.cos(theta)
@@ -46,4 +46,3 @@ def reward_inverted_pendulum(
     )
 
     return reward
-

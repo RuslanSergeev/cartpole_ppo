@@ -1,3 +1,6 @@
+from collections import defaultdict
+from typing import Callable, Any
+from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,7 +8,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
-from .actions import (
+from .action_statistics import (
     sample_normal_action,
     get_probability_ratio,
 )
@@ -21,16 +24,12 @@ from .loss_functions import (
     combine_losses,
 )
 from .rl_dataset import RLDataset
-from .actor import Actor
-from .critic import Critic
-from .environment import InvertedPendulumEnv as Environment
-from .logging import logger
 from .hardware_manager import Hardware_manager
-from .checkpoints import Checkpoint
+from .model_checkpoints import Checkpoint
+from .logging import logger
 
 
 def rollout_old_policy(
-    state_init: torch.Tensor,
     environment,
     actor: nn.Module,
     critic: nn.Module,
@@ -38,11 +37,12 @@ def rollout_old_policy(
     *,
     gamma: float = 0.99,
     lam: float = 0.95,
+    device: torch.device = Hardware_manager.get_device(),
 ) -> RLDataset:
     """
     Rollout the old policy from state init.
     Args:
-        state_init (torch.Tensor): Initial state of the environment.
+        state_init (np.ndarray): Initial state of the environment.
         environment: Environment to sample from.
         actor (nn.Module): Actor network for policy approximation.
         critic (nn.Module): Critic network for value approximation.
@@ -52,29 +52,19 @@ def rollout_old_policy(
     Returns:
         RLDataset: Dataset containing the rollout data.
     """
-    actor.eval()
-    critic.eval()
+    actor = actor.to(device).eval()
+    critic = critic.to(device).eval()
     # Create the buffers:
-    buffer = {
-        "states": [],
-        "actions": [],
-        "log_probs": [],
-        "rewards": [],
-        "values": [],
-        "dones": [],
-    }
+    buffer = defaultdict(list)
     with torch.no_grad():
         # reset the environment
-        state = environment.reset(state_init.cpu().numpy())
+        state = environment.reset()
         for _ in range(num_time_steps):
-            buffer["states"].append([state])
+            buffer["states"].append(state)
             # get the action distribution parameters
-            tensor_state = torch.Tensor(
-                state, device=actor.device
-            ).unsqueeze(0)
-            action_mean, action_log_std = actor(tensor_state)
+            action_mean, action_log_std = actor(state)
             # squeeze if the action is a scalar
-            value = critic(tensor_state)
+            value = critic(state)
             # sample a normally distributed action
             action, log_prob, _ = sample_normal_action(
                 action_mean,
@@ -85,32 +75,34 @@ def rollout_old_policy(
                 action.cpu().numpy()
             )
             # buffer the old policy data
-            buffer["actions"].append([action])
-            buffer["log_probs"].append([log_prob])
-            buffer["rewards"].append([reward])
-            buffer["values"].append([value])
-            buffer["dones"].append([done])
+            buffer["actions"].append(action)
+            buffer["log_probs"].append(log_prob)
+            buffer["rewards"].append(reward)
+            buffer["values"].append(value)
+            buffer["dones"].append(done)
+            # if the episode is done, reset the environment
+            if done:
+                state = environment.reset()
         # criticize the last value
-        tensor_state = torch.Tensor(
-            state, device=actor.device
-        ).unsqueeze(0)
-        value = critic(tensor_state)
-        buffer["values"].append([value])
+        value = critic(state)
+        buffer["values"].append(value)
 
         dataset = RLDataset(device=actor.device, dtype=value.dtype)
         dataset.add(**buffer)
-        dataset.data["rewards"] = normalize_rewards(dataset.rewards)
-        dataset.data["advantages"] = get_gae_advantages(
+        dataset.rewards = normalize_rewards(dataset.rewards)
+        dataset.advantages = get_gae_advantages(
             dataset.rewards,
             dataset.values,
             dataset.dones,
             gamma=gamma,
             lam=lam,
         )
-        dataset.data["returns"] = get_gae_returns(dataset.advantages, dataset.values)
-        # Remove the last value from the dataset, used only for 
-        # calculating the returns and advantages
-        dataset.data["values"] = dataset.values[:-1]
+        dataset.returns = get_gae_returns(
+            dataset.advantages, 
+            dataset.values
+        )
+    dataset.detach()
+
     return dataset
 
 
@@ -150,55 +142,21 @@ def validate_new_policy(
     return loss
 
 
-def get_random_state(
-    x_init_min: float = -1.0,
-    x_init_max: float = 1.0,
-    theta_init_min: float = -np.pi,
-    theta_init_max: float = np.pi,
-    x_dot_init_min: float = -1.0,
-    x_dot_init_max: float = 1.0,
-    theta_dot_init_min: float = -1.0,
-    theta_dot_init_max: float = 1.0,
-) -> torch.Tensor:
-    """Utility function to get a random state for the cartpole environment."""
-    x_init = np.random.uniform(x_init_min, x_init_max)
-    theta_init = np.random.uniform(theta_init_min, theta_init_max)
-    x_dot_init = np.random.uniform(x_dot_init_min, x_dot_init_max)
-    theta_dot_init = np.random.uniform(
-        theta_dot_init_min,
-        theta_dot_init_max,
-    )
-    return torch.tensor([
-        x_init,
-        theta_init,
-        x_dot_init,
-        theta_dot_init,
-    ])
-
-
 def test_agent(
-    actor: Actor,
-    critic: Critic,
-    env: Environment,
-    episode: int,
+    actor: nn.Module,
+    critic: nn.Module,
+    env: Any,
     *,
-    num_time_steps: int = 500,
+    num_time_steps: int = 5000,
 ) -> None:
     """
     Test the agent in the environment.
     """
-    # Set the initial state for each iteration
-    qpos_qvel_init = [0.0, np.pi, 0.0, 0.0],
-    state_init = torch.tensor(
-        qpos_qvel_init, device=actor.device, dtype=torch.float32
-    )
-
-    # Rollout the old policy from state init
+    # Rollout the old policy from initial state
     with torch.no_grad():
         actor.eval()
         critic.eval()
         dataset = rollout_old_policy(
-            state_init=state_init,
             environment=env,
             actor=actor,
             critic=critic,
@@ -208,18 +166,21 @@ def test_agent(
         total_reward = dataset.rewards.sum()
         average_reward = dataset.rewards.mean()
         max_reward = dataset.rewards.max()
-        logger.info(f"Episode {episode} summ reward: {total_reward.item()}")
-        logger.info(f"Episode {episode} average reward: {average_reward.item()}")
-        logger.info(f"Episode {episode} max reward: {max_reward.item()}")
+        logger.info(f"Summ reward: {total_reward.item()}")
+        logger.info(f"Average reward: {average_reward.item()}")
+        logger.info(f"Max reward: {max_reward.item()}")
         logger.info("__________________________________")
 
 
-def train_cartpole_ppo(
+def train_ppo(
     num_episodes: int = 5000,
     num_actors: int = 5,
     num_time_steps: int = 6000,
     num_epochs: int = 500,
     *,
+    environment,
+    actor: nn.Module,
+    critic: nn.Module,
     lr_actor: float = 1e-4,
     lr_critic: float = 0.5e-4,
     gamma: float = 0.99,
@@ -233,12 +194,10 @@ def train_cartpole_ppo(
     """
     Run the PPO algorithm on the CartPole environment.
     """
-    # Prepare the environment
-    env = Environment(enable_rendering=False)
-    # Actor network for policy approximation
-    actor = Actor(state_dim=4, action_dim=1).to(device)
-    # Critic network for value approximation
-    critic = Critic(state_dim=4).to(device)
+    actor = actor.to(device)
+    critic = critic.to(device)
+    actor_old = actor.clone().eval().to(device)
+    critic_old = critic.clone().eval().to(device)
     # Optimizers:
     optimizer_actor = Adam(actor.parameters(), lr=lr_actor)
     optimizer_critic = Adam(critic.parameters(), lr=lr_critic)
@@ -263,33 +222,25 @@ def train_cartpole_ppo(
         checkpoint.load()
 
     # Run num_iterations of rollouts and trainings
-    current_episode = checkpoint.data["episode"]
-    for episode in range(current_episode, num_episodes):
-        actor_old = Actor(state_dim=4, action_dim=1)
+    first_episode = checkpoint.data["episode"]
+    last_episode = first_episode + num_episodes
+    for episode in range(first_episode, last_episode):
         actor_old.load_state_dict(actor.state_dict())
-        actor_old.eval()
-        critic_old = Critic(state_dim=4)
         critic_old.load_state_dict(critic.state_dict())
-        critic_old.eval()
         # set up common buffer for all actors
         dataset = RLDataset(device=device, dtype=torch.float32)
         # Rollout the old policy from state init
-        qpos_qvel_init = [0.0, np.pi, 0.0, 0.0],
-        state_init=torch.tensor(
-            qpos_qvel_init, device=device, dtype=torch.float32
-        )
-
         with torch.no_grad():
             for _ in range(num_actors):
                 # rollout the old policy
                 current_buffer = rollout_old_policy(
-                    state_init=state_init,
-                    environment=env,
+                    environment=environment,
                     actor=actor_old,
                     critic=critic_old,
                     num_time_steps=num_time_steps,
                     gamma=gamma,
                     lam=lam,
+                    device=device,
                 )
                 # add the current buffer to the common buffer
                 dataset.add(**current_buffer.data)
@@ -312,8 +263,8 @@ def train_cartpole_ppo(
                 if batch_idx % log_any == 0:
                     logger.info(f"{episode}/{epoch}/{batch_idx}: Loss: {loss.item()}")
         # Test the agent
-        test_agent(actor, critic, env, episode,
-            num_time_steps=num_time_steps,
+        test_agent(
+            actor, critic, environment, num_time_steps=num_time_steps,
         )
         # Update the learning rate
         scheduler_actor.step()
@@ -322,31 +273,3 @@ def train_cartpole_ppo(
         logger.info(f"lr_critic={scheduler_critic.get_last_lr()}")
         # Save the trained models
         checkpoint.save(episode=episode)
-
-
-def demo_cartpole_ppo(checkpoint_path: str = "model_checkpoint.pth", num_time_steps: int = 5000, enable_rendering: bool = True):
-    """
-    Run a demo of the PPO agent on the CartPole environment.
-    """
-    # Load the actor and critic
-    actor = Actor(state_dim=4, action_dim=1).to(device=Hardware_manager.get_device())
-    critic = Critic(state_dim=4).to(device=Hardware_manager.get_device())
-    environment = Environment(enable_rendering=enable_rendering)
-    # Load the checkpoint
-    checkpoint = Checkpoint(
-        checkpoint_path, 
-        {
-            "actor": actor,
-            "critic": critic,
-            "episode": 0,
-        }
-    )
-    checkpoint.load()
-    # Test the agent
-    test_agent(
-        actor=checkpoint.data["actor"],
-        critic=checkpoint.data["critic"],
-        env=environment,
-        episode=checkpoint.data["episode"],
-        num_time_steps=num_time_steps,
-    )

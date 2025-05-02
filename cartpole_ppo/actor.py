@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from .convert_to_tensor import convert_to_tensor
 
 class Actor(nn.Module):
     """
@@ -19,10 +20,16 @@ class Actor(nn.Module):
         max_log_std: float = 2.0,
     ):
         super(Actor, self).__init__()
+        # Copy the arguments
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.hidden_dim = hidden_dim
         self.action_bias = action_bias
         self.action_scale = action_scale
+        self.log_std_init = log_std_init
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
+        # Initialize the networks
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.mu_head = nn.Linear(hidden_dim, action_dim)
@@ -31,6 +38,13 @@ class Actor(nn.Module):
         )
 
     def forward(self, x):
+        # convert to tensor if needed
+        x = convert_to_tensor(
+            x, 
+            device=self.device, 
+            dtype=self.dtype, 
+            feature_dim=self.state_dim
+        )
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         mu = torch.tanh(self.mu_head(x))
@@ -42,9 +56,31 @@ class Actor(nn.Module):
         ).expand_as(mu)
         return mu, log_std
 
+    def clone(self):
+        """
+        Clone the actor network.
+        """
+        return Actor(
+            state_dim=self.state_dim,
+            action_dim=self.action_dim,
+            hidden_dim=self.hidden_dim,
+            action_bias=self.action_bias,
+            action_scale=self.action_scale,
+            log_std_init=self.log_std_init,
+            min_log_std=self.min_log_std,
+            max_log_std=self.max_log_std
+        ).to(self.device)
+
     @property
     def device(self):
         """
         Get the device of the model.
         """
-        return self.fc1.weight.device
+        return self.parameters().__next__().device
+
+    @property
+    def dtype(self):
+        """
+        Get the dtype of the model.
+        """
+        return self.parameters().__next__().dtype
