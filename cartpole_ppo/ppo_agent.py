@@ -166,9 +166,9 @@ def test_agent(
         total_reward = dataset.rewards.sum().cpu().item()
         average_reward = dataset.rewards.mean().cpu().item()
         max_reward = dataset.rewards.max().cpu().item()
-        logger.info(f"Summ reward: {total_reward.item()}")
-        logger.info(f"Average reward: {average_reward.item()}")
-        logger.info(f"Max reward: {max_reward.item()}")
+        logger.info(f"Summ reward: {total_reward}")
+        logger.info(f"Average reward: {average_reward}")
+        logger.info(f"Max reward: {max_reward}")
         logger.info("__________________________________")
 
 
@@ -186,7 +186,7 @@ def train_ppo(
     gamma: float = 0.99,
     lam: float = 0.95,
     log_any: int = 100,
-    batch_size: int = 256,
+    batch_size: int = 32,
     model_checkpoint_path: str = "model_checkpoint.pth",
     continue_training: bool = False,
     device: torch.device = Hardware_manager.get_device(),
@@ -202,9 +202,9 @@ def train_ppo(
     optimizer_actor = Adam(actor.parameters(), lr=lr_actor)
     optimizer_critic = Adam(critic.parameters(), lr=lr_critic)
     # scheduler for the actor
-    scheduler_actor = StepLR(optimizer_actor, step_size=100, gamma=0.9)
+    scheduler_actor = StepLR(optimizer_actor, step_size=20, gamma=0.9)
     # scheduler for the critic
-    scheduler_critic = StepLR(optimizer_critic, step_size=100, gamma=0.9)
+    scheduler_critic = StepLR(optimizer_critic, step_size=20, gamma=0.9)
     # Checkpoint for saving the model
     checkpoint = Checkpoint(
         model_checkpoint_path, 
@@ -228,7 +228,7 @@ def train_ppo(
         actor_old.load_state_dict(actor.state_dict())
         critic_old.load_state_dict(critic.state_dict())
         # set up common buffer for all actors
-        dataset = RLDataset(device=device, dtype=torch.float32)
+        dataset = RLDataset(device=device, dtype=actor.dtype)
         # Rollout the old policy from state init
         with torch.no_grad():
             for _ in range(num_actors):

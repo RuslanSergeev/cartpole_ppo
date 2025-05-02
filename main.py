@@ -7,6 +7,10 @@ from cartpole_ppo.environment import InvertedPendulumEnv as Environment
 from cartpole_ppo.hardware_manager import Hardware_manager
 from cartpole_ppo.environment import demo_cartpole_ppo
 from cartpole_ppo.model_checkpoints import Checkpoint
+from cartpole_ppo.state_generators import (
+    get_pendulum_down_state,
+    get_random_state,
+)
 
 
 def train(
@@ -14,7 +18,10 @@ def train(
     device = Hardware_manager.get_device(),
 ):
     # Prepare the environment
-    environment = Environment(enable_rendering=False)
+    environment = Environment(
+        enable_rendering=False,
+        initial_state_generator=get_random_state,
+    )
     # Actor network for policy approximation
     actor = Actor(state_dim=4, action_dim=1).to(device)
     # Critic network for value approximation
@@ -25,11 +32,14 @@ def train(
         environment=environment,
         actor=actor,
         critic=critic,
+        lr_actor=1e-5,
+        lr_critic=0.5e-4,
         num_episodes=5000,
-        num_actors=5,
-        num_epochs=100,
+        num_actors=20,
+        num_epochs=10,
         num_time_steps=6000,
-        log_any=100,
+        batch_size=64,
+        log_any=10,
         device=Hardware_manager.get_device()
     )
 
