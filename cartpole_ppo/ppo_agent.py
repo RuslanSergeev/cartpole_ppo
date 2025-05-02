@@ -163,9 +163,9 @@ def test_agent(
             num_time_steps=num_time_steps,
         )
         # Print the collected total and average rewards
-        total_reward = dataset.rewards.sum()
-        average_reward = dataset.rewards.mean()
-        max_reward = dataset.rewards.max()
+        total_reward = dataset.rewards.sum().cpu().item()
+        average_reward = dataset.rewards.mean().cpu().item()
+        max_reward = dataset.rewards.max().cpu().item()
         logger.info(f"Summ reward: {total_reward.item()}")
         logger.info(f"Average reward: {average_reward.item()}")
         logger.info(f"Max reward: {max_reward.item()}")
@@ -186,7 +186,7 @@ def train_ppo(
     gamma: float = 0.99,
     lam: float = 0.95,
     log_any: int = 100,
-    batch_size: int = 16,
+    batch_size: int = 256,
     model_checkpoint_path: str = "model_checkpoint.pth",
     continue_training: bool = False,
     device: torch.device = Hardware_manager.get_device(),
@@ -261,7 +261,8 @@ def train_ppo(
                 optimizer_critic.step()
                 # log the loss
                 if batch_idx % log_any == 0:
-                    logger.info(f"{episode}/{epoch}/{batch_idx}: Loss: {loss.item()}")
+                    loss = loss.detach().cpu().item()
+                    logger.info(f"{episode}/{epoch}/{batch_idx}: Loss: {loss}")
         # Test the agent
         test_agent(
             actor, critic, environment, num_time_steps=num_time_steps,

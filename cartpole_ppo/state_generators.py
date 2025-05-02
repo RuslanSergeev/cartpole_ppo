@@ -26,12 +26,15 @@ def get_random_state(
     ])
 
 
-def get_pendulum_down_state() -> np.ndarray:
+def get_pendulum_down_state(
+    delta_theta: float = 1.0e-3,
+) -> np.ndarray:
     """Utility function to get a state for the cartpole environment."""
     # Pendulum down state either
     #   - theta = pi
     #   - theta = -pi
-    theta = np.random.choice([np.pi, -np.pi])
+    delta = np.random.uniform(-delta_theta, delta_theta)
+    theta = np.random.choice([np.pi+delta, -np.pi+delta])
     return np.array([
         0.0,
         theta,
