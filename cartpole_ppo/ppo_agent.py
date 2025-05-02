@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Callable, Any
 from copy import deepcopy
+from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn as nn
@@ -59,7 +60,7 @@ def rollout_old_policy(
     with torch.no_grad():
         # reset the environment
         state = environment.reset()
-        for _ in range(num_time_steps):
+        for _ in tqdm(range(num_time_steps), desc="Rollout old policy", unit="step"):
             buffer["states"].append(state)
             # get the action distribution parameters
             action_mean, action_log_std = actor(state)
@@ -96,10 +97,12 @@ def rollout_old_policy(
             gamma=gamma,
             lam=lam,
         )
-        dataset.advantages = normalize_advantages(dataset.advantages)
         dataset.returns = get_gae_returns(
             dataset.advantages, 
             dataset.values
+        )
+        dataset.advantages = normalize_advantages(
+            dataset.advantages
         )
     dataset.detach()
 
