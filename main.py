@@ -27,7 +27,7 @@ def train(
         critic=critic,
         num_episodes=5000,
         num_actors=5,
-        num_epochs=10,
+        num_epochs=100,
         num_time_steps=6000,
         log_any=100,
         device=Hardware_manager.get_device()

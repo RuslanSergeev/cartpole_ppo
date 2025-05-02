@@ -186,7 +186,7 @@ def train_ppo(
     gamma: float = 0.99,
     lam: float = 0.95,
     log_any: int = 100,
-    batch_size: int = 32,
+    batch_size: int = 16,
     model_checkpoint_path: str = "model_checkpoint.pth",
     continue_training: bool = False,
     device: torch.device = Hardware_manager.get_device(),

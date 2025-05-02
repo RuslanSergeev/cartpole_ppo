@@ -7,10 +7,10 @@ def reward_inverted_pendulum(
     qpos: np.ndarray,
     qvel: np.ndarray,
     *,
-    alpha_theta: float = 1.0,
-    alpha_theta_dot: float = 0.05,
-    alpha_x: float = 0.2,
-    alpha_x_dot: float = 0.05,
+    alpha_theta: float = 8.0,
+    alpha_theta_dot: float = 1.0,
+    alpha_x: float = 1.0,
+    alpha_x_dot: float = 1.0,
 ) -> float:
     """
     Calculate the reward based on the vertical position of the pole,

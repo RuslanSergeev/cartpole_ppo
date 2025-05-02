@@ -46,14 +46,7 @@ class InvertedPendulumEnv:
         self.data.ctrl = a
         mujoco.mj_step(self.model, self.data)
         self.sync()
-        reward = reward_inverted_pendulum(
-            self.data.qpos,
-            self.data.qvel,
-            alpha_theta=1,
-            alpha_theta_dot=0,
-            alpha_x=0.2,
-            alpha_x_dot=0,
-        )
+        reward = self.reward_generator(self.data.qpos, self.data.qvel)
         ob = self.obs()
         terminated = bool(not np.isfinite(ob).all())
         # If rendering, ensure real-time simulation
