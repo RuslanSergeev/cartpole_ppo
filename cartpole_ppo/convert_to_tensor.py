@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 def convert_to_tensor(value, device=None, dtype=None, feature_dim=1):
@@ -10,7 +11,7 @@ def convert_to_tensor(value, device=None, dtype=None, feature_dim=1):
     """
     if not isinstance(value, torch.Tensor):
         # Single non-tensor value
-        value = torch.tensor(value)
+        value = torch.tensor(np.array(value))
     # If squashed, convert to expected shape
     if value.dim() == 1:
         value = value.view(-1, feature_dim)

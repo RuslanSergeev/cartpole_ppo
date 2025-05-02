@@ -59,7 +59,6 @@ def rollout_old_policy(
     with torch.no_grad():
         # reset the environment
         state = environment.reset()
-        breakpoint()
         for _ in range(num_time_steps):
             buffer["states"].append(state)
             # get the action distribution parameters
