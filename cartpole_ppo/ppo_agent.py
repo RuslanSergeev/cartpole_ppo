@@ -15,7 +15,7 @@ from .action_statistics import (
 from .return_estimators import (
     get_gae_advantages,
     get_gae_returns,
-    normalize_rewards,
+    normalize_advantages,
 )
 from .loss_functions import (
     get_policy_loss,
@@ -59,6 +59,7 @@ def rollout_old_policy(
     with torch.no_grad():
         # reset the environment
         state = environment.reset()
+        breakpoint()
         for _ in range(num_time_steps):
             buffer["states"].append(state)
             # get the action distribution parameters
@@ -89,7 +90,6 @@ def rollout_old_policy(
 
         dataset = RLDataset(device=actor.device, dtype=value.dtype)
         dataset.add(**buffer)
-        dataset.rewards = normalize_rewards(dataset.rewards)
         dataset.advantages = get_gae_advantages(
             dataset.rewards,
             dataset.values,
@@ -97,6 +97,7 @@ def rollout_old_policy(
             gamma=gamma,
             lam=lam,
         )
+        dataset.advantages = normalize_advantages(dataset.advantages)
         dataset.returns = get_gae_returns(
             dataset.advantages, 
             dataset.values

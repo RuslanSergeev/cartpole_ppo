@@ -67,21 +67,21 @@ def get_monte_carlo_returns(
     return returns
 
 
-def normalize_rewards(rewards: torch.Tensor) -> torch.Tensor:
+def normalize_advantages(advantages: torch.Tensor) -> torch.Tensor:
     """
-    Normalize the rewards to have mean 0 and standard deviation 1.
+    Normalize the advantages to have mean 0 and standard deviation 1.
     
     Args:
-        rewards (torch.Tensor): Rewards for each transition.
+        advantages (torch.Tensor): advantages for each transition.
     
     Returns:
-        rewards (torch.Tensor): Normalized rewards.
+        advantages (torch.Tensor): Normalized advantages .
     """
-    mean = rewards.mean()
-    std = rewards.std()
-    normalized_rewards = (rewards - mean) / (std + 1e-8)
+    mean = advantages .mean()
+    std = advantages .std()
+    normalized_advantages = (advantages - mean) / (std + 1e-8)
 
-    return normalized_rewards
+    return normalized_advantages
 
 
 def get_bootstrap_returns(

@@ -63,7 +63,7 @@ class InvertedPendulumEnv:
         qvel = self.data.qvel
         # Limit the theta observation to the range [-pi, pi]
         qpos[1] = np.arctan2(np.sin(qpos[1]), np.cos(qpos[1]))
-        return np.concatenate([qpos, qvel]).ravel()
+        return np.concatenate([qpos, qvel])
 
     def reset(self, state: Optional[np.ndarray] = None):
         if state is None:
