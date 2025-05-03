@@ -55,7 +55,7 @@ def get_value_loss(
     Returns:
         torch.Tensor: The calculated value loss.
     """
-    return ((values - returns) ** 2).mean()
+    return ((returns - values) ** 2).mean()
 
 
 def combine_losses(

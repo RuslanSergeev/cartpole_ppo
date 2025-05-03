@@ -50,10 +50,13 @@ class Critic(nn.Module):
         Returns:
             Critic: A new instance of the Critic network.
         """
-        return Critic(
+        clone = Critic(
             state_dim=self.state_dim,
             hidden_dim=self.fc1.out_features
         ).to(self.device)
+
+        clone.load_state_dict(self.state_dict().copy())
+        return clone
 
     @property
     def device(self):

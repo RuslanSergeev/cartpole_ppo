@@ -123,7 +123,7 @@ def validate_new_policy(
 ) -> torch.Tensor:
     """
     Evaluate the new policy using the old policy data.
-    Obtains the policy probability ratios, gae advantages, and critic values.
+    Given the states, actions, advantages, 
     """
     values = critic(states)
     action_mean, action_log_std = actor(states)
@@ -222,14 +222,14 @@ def train_ppo(
         }
     )
     if continue_training:
-        checkpoint.load()
+        checkpoint.load(device)
 
     # Run num_iterations of rollouts and trainings
     first_episode = checkpoint.data["episode"]
     last_episode = first_episode + num_episodes
     for episode in range(first_episode, last_episode):
-        actor_old.load_state_dict(actor.state_dict())
-        critic_old.load_state_dict(critic.state_dict())
+        actor_old.load_state_dict(actor.state_dict().copy())
+        critic_old.load_state_dict(critic.state_dict().copy())
         # set up common buffer for all actors
         dataset = RLDataset(device=device, dtype=actor.dtype)
         # Rollout the old policy from state init

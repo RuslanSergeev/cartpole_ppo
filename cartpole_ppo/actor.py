@@ -15,9 +15,9 @@ class Actor(nn.Module):
         *,
         action_bias: float = 0.0,
         action_scale: float = 3.0,
-        log_std_init: float = -1.0,
+        log_std_init: float = -2.0,
         min_log_std: float = -20.0,
-        max_log_std: float = 2.0,
+        max_log_std: float = -1.0,
     ):
         super(Actor, self).__init__()
         # Copy the arguments
@@ -60,7 +60,7 @@ class Actor(nn.Module):
         """
         Clone the actor network.
         """
-        return Actor(
+        clone = Actor(
             state_dim=self.state_dim,
             action_dim=self.action_dim,
             hidden_dim=self.hidden_dim,
@@ -70,6 +70,9 @@ class Actor(nn.Module):
             min_log_std=self.min_log_std,
             max_log_std=self.max_log_std
         ).to(self.device)
+        clone.load_state_dict(self.state_dict().copy())
+
+        return clone
 
     @property
     def device(self):

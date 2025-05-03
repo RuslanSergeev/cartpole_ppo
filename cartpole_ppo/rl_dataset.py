@@ -9,7 +9,6 @@ class RLDataset(Dataset):
     """
     def __init__(
         self,
-        *,
         device: torch.device = torch.device("cpu"),
         dtype: torch.dtype = torch.float32,
     ):

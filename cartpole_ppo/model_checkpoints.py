@@ -1,6 +1,7 @@
 from typing import Dict, Any
 import torch
 from .logging import logger
+from .hardware_manager import Hardware_manager
 
 
 class Checkpoint:
@@ -37,12 +38,18 @@ class Checkpoint:
         torch.save(sanitized_checkpoint, self.path)
         logger.info(f"Saved checkpoint to {self.path}")
 
-    def load(self) -> None:
+    def load(
+        self, 
+        device: torch.device=Hardware_manager.get_device()
+    ) -> None:
         """
         Load the checkpoint from a file.
         """
         logger.info(f"Loading checkpoint from {self.path}")
-        checkpoint = torch.load(self.path)
+        checkpoint = torch.load(
+            self.path, 
+            map_location=device
+        )
         for key, value in self.data.items():
             if hasattr(value, "load_state_dict"):
                 value.load_state_dict(checkpoint[key])
