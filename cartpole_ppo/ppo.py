@@ -47,6 +47,12 @@ class PPO_agent:
         gamma: float = 0.99,
         lam: float = 0.95,
         epsilon: float = 0.2,
+        lr_actor: float = 1e-4,
+        lr_critic: float = 0.5e-4,
+        actor_scheduler_step_size: int = 20,
+        actor_scheduler_gamma: float = 0.9,
+        critic_scheduler_step_size: int = 20,
+        critic_scheduler_gamma: float = 0.9,
         train_init_state_generator: Callable,
         test_init_state_generator: Callable,
         device: torch.device = Hardware_manager.get_device(),
@@ -56,6 +62,25 @@ class PPO_agent:
         Initialize the PPO agent.
         
         Args:
+            environment (Any): The environment to train on.
+                Should support the `reset` and `step` methods.
+            actor (nn.Module): The actor network.
+                Maps the state to the action distribution parameters.
+            critic (nn.Module): The critic network.
+                Maps the state to the value function.
+            gamma (float): Discount factor for future rewards.
+            lam (float): Lambda for GAE.
+            epsilon (float): Epsilon for PPO.
+            lr_actor (float): Learning rate for actor.
+            lr_critic (float): Learning rate for critic.
+            actor_scheduler_step_size (int): Step size for actor scheduler.
+            actor_scheduler_gamma (float): Gamma for actor scheduler.
+            critic_scheduler_step_size (int): Step size for critic scheduler.
+            critic_scheduler_gamma (float): Gamma for critic scheduler.
+            train_init_state_generator (Callable): Function to generate initial state for training.
+            test_init_state_generator (Callable): Function to generate initial state for testing.
+            device (torch.device): Device to run the model on.
+            dtype (torch.dtype): Data type of the model parameters.
         """
         self.environment = environment
         self.actor = actor
@@ -63,43 +88,63 @@ class PPO_agent:
         self.gamma = gamma
         self.lam = lam
         self.epsilon = epsilon
+        self.lr_actor = lr_actor
+        self.lr_critic = lr_critic
+        self.actor_scheduler_step_size = actor_scheduler_step_size
+        self.actor_scheduler_gamma = actor_scheduler_gamma
+        self.critic_scheduler_step_size = critic_scheduler_step_size
+        self.critic_scheduler_gamma = critic_scheduler_gamma
 
         self.train_init_state_generator = train_init_state_generator
         self.test_init_state_generator = test_init_state_generator
         self.device = device
         self.dtype = dtype
 
-    def load(self, model_path: str):
-        """
-        Load the model from the checkpoint.
-        """
-        logger.info(f"Loading model from {model_path}")
-        checkpoint = Checkpoint(
-            model_path, 
-            {
-                "actor": self.actor,
-                "critic": self.critic,
-            }
-        )
-        checkpoint.load(self.device)
-        logger.info("Model loaded successfully")
+        # Set the actor and critic to the device
+        self.actor = self.actor.to(self.device, dtype=self.dtype)
+        self.critic = self.critic.to(self.device, dtype=self.dtype)
 
-    def save(self, model_path):
-        """
-        Save the model to the checkpoint.
-        """
-        logger.info(f"Saving model to {model_path}")
-        checkpoint = Checkpoint(
-            model_path, 
-            {
-                "actor": self.actor,
-                "critic": self.critic,
-            }
+        # Optimizers, even if not used:
+        self.optimizer_actor = Adam(self.actor.parameters(), lr=self.lr_actor)
+        self.optimizer_critic = Adam(self.critic.parameters(), lr=self.lr_critic)
+        # schedulers, even if not used:
+        self.scheduler_actor = StepLR(
+            self.optimizer_actor, 
+            step_size=self.actor_scheduler_step_size,
+            gamma=self.actor_scheduler_gamma
         )
-        checkpoint.save()
-        logger.info("Model saved successfully")
+        self.scheduler_critic = StepLR(
+            self.optimizer_critic, 
+            step_size=self.critic_scheduler_step_size,
+            gamma=self.critic_scheduler_gamma
+        )
+        self.checkpoint_dict = {
+            "actor": self.actor,
+            "critic": self.critic,
+            "actor_optimizer": self.optimizer_actor,
+            "critic_optimizer": self.optimizer_critic,
+            "actor_scheduler": self.scheduler_actor,
+            "critic_scheduler": self.scheduler_critic,
+            "episode": 0,
+        }
 
-    def rollout_old_policy(
+    def load(self, checkpoint_path: str) -> None:
+        """
+        Load the model from a checkpoint.
+        Args:
+            checkpoint_path (str): Path to the checkpoint file.
+        """
+        Checkpoint.load(checkpoint_path, self.checkpoint_dict)
+
+    def save(self, checkpoint_path: str) -> None:
+        """
+        Save the model to a checkpoint.
+        Args:
+            checkpoint_path (str): Path to the checkpoint file.
+        """
+        Checkpoint.save(checkpoint_path, self.checkpoint_dict)
+
+    def _rollout(
         self,
         num_time_steps: int,
         init_state: np.ndarray
@@ -124,9 +169,7 @@ class PPO_agent:
                 # squeeze if the action is a scalar
                 value = self.critic(state)
                 # sample a normally distributed action
-                action, log_prob, _ = sample_normal_action(
-                    action_mean, action_log_std
-                )
+                action, log_prob, _ = sample_normal_action(action_mean, action_log_std)
                 # sample the environment
                 state, reward, done = self.environment.step(
                     action.cpu().numpy()
@@ -159,74 +202,53 @@ class PPO_agent:
 
         return dataset
 
-    def validate_new_policy(
+    def _validate(
         self,
         *_,
-        dataset: RLDataset,
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        log_probs: torch.Tensor,
+        advantages: torch.Tensor,
+        returns: torch.Tensor,
         **__,
     ) -> torch.Tensor:
         """
-        Evaluate the new policy using the old policy data.
+        Validate the `new` policy using the `old` policy data.
         Given the states, actions, advantages, 
         """
-        values = self.critic(dataset.states)
-        action_mean, action_log_std = self.actor(dataset.states)
+        values = self.critic(states)
+        action_mean, action_log_std = self.actor(states)
         _, __, entropy = sample_normal_action(action_mean, action_log_std)
         probability_ratio = get_probability_ratio(
-            action_mean, action_log_std, dataset.actions, dataset.log_probs,
+            action_mean, action_log_std, actions, log_probs,
         )
         policy_loss = get_policy_loss(
-            probability_ratio, dataset.advantages, self.epsilon
+            probability_ratio, advantages, self.epsilon
         )
-        value_loss = get_value_loss(values, dataset.returns)
+        value_loss = get_value_loss(values, returns)
         entropy_loss = get_entropy_loss(entropy)
         loss = combine_losses(policy_loss, value_loss, entropy_loss)
         return loss
 
-    def train_ppo(
+    def train(
         self,
-        num_episodes: int = 5000,
-        num_actors: int = 5,
+        num_episodes: int = 1000,
+        num_actors: int = 1,
         num_time_steps: int = 6000,
-        num_epochs: int = 500,
+        num_epochs: int = 10,
         *,
-        lr_actor: float = 1e-4,
-        lr_critic: float = 0.5e-4,
         log_any: int = 100,
         batch_size: int = 32,
         model_checkpoint_path: str,
-        continue_training: bool = False,
     ):
         """
         Run the PPO algorithm on the CartPole environment.
         """
         actor = self.actor.to(self.device)
         critic = self.critic.to(self.device)
-        # Optimizers:
-        optimizer_actor = Adam(actor.parameters(), lr=lr_actor)
-        optimizer_critic = Adam(critic.parameters(), lr=lr_critic)
-        # scheduler for the actor
-        scheduler_actor = StepLR(optimizer_actor, step_size=20, gamma=0.9)
-        # scheduler for the critic
-        scheduler_critic = StepLR(optimizer_critic, step_size=20, gamma=0.9)
-        # Checkpoint for saving the model
-        checkpoint = Checkpoint(
-            model_checkpoint_path, 
-            {
-                "episode": 0,
-                "actor": actor,
-                "critic": critic,
-                "actor_optimizer": optimizer_actor,
-                "critic_optimizer": optimizer_critic,
-                "actor_scheduler": scheduler_actor,
-                "critic_scheduler": scheduler_critic,
-            }
-        )
-        if continue_training:
-            checkpoint.load(self.device)
-
+     
         # Run num_iterations of rollouts and trainings
-        first_episode = checkpoint.data["episode"]
+        first_episode = self.checkpoint_dict["episode"]
         last_episode = first_episode + num_episodes
         for episode in range(first_episode, last_episode):
             # set up common buffer for all actors
@@ -236,7 +258,7 @@ class PPO_agent:
                 for _ in range(num_actors):
                     # rollout the old policy
                     init_state = self.train_init_state_generator()
-                    current_buffer = self.rollout_old_policy(
+                    current_buffer = self._rollout(
                         num_time_steps, init_state
                     )
                     # add the current buffer to the common buffer
@@ -249,35 +271,30 @@ class PPO_agent:
                     actor.train()
                     critic.train()
                     # get the new policy loss
-                    loss = self.validate_new_policy(actor, critic, **batch)
+                    loss = self._validate(**batch)
                     # Perform optimization step
-                    optimizer_actor.zero_grad()
-                    optimizer_critic.zero_grad()
+                    self.optimizer_actor.zero_grad()
+                    self.optimizer_critic.zero_grad()
                     loss.backward()
-                    optimizer_actor.step()
-                    optimizer_critic.step()
+                    self.optimizer_actor.step()
+                    self.optimizer_critic.step()
                     # log the loss
                     if batch_idx % log_any == 0:
                         loss = loss.detach().cpu().item()
-                        average_loss = loss / batch_size
+                        average_loss = loss / len(batch)
                         logger.info(f"{episode}|{epoch}|{batch_idx}: Loss: {average_loss}")
             # Test the agent
-            self.test_agent(
-                num_time_steps=num_time_steps,
-            )
+            self.test(num_time_steps=num_time_steps)
             # Update the learning rate
-            scheduler_actor.step()
-            scheduler_critic.step()
-            logger.info(f"lr_actor={scheduler_actor.get_last_lr()}" )
-            logger.info(f"lr_critic={scheduler_critic.get_last_lr()}")
+            self.scheduler_actor.step()
+            self.scheduler_critic.step()
+            logger.info(f"lr_actor={self.scheduler_actor.get_last_lr()}" )
+            logger.info(f"lr_critic={self.scheduler_critic.get_last_lr()}")
             # Save the trained models
-            checkpoint.save(episode=episode)
+            self.checkpoint_dict["episode"] = episode
+            self.save(model_checkpoint_path)
 
-    def test_agent(
-        self,
-        *,
-        num_time_steps: int = 5000,
-    ) -> None:
+    def test(self, *, num_time_steps: int = 5000) -> None:
         """
         Test the agent in the environment.
         """
@@ -286,7 +303,7 @@ class PPO_agent:
             self.actor.eval()
             self.critic.eval()
             init_state = self.test_init_state_generator()
-            dataset = self.rollout_old_policy(num_time_steps, init_state)
+            dataset = self._rollout(num_time_steps, init_state)
             # Print the collected total and average rewards
             average_reward = dataset.rewards.mean().cpu().item()
             max_reward = dataset.rewards.max().cpu().item()

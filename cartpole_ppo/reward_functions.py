@@ -1,5 +1,6 @@
 """
-This module contains a set of reward functions for reinforcement learning environments.
+This module contains a set of reward functions the CartPole environment.
+User may try to use these reward functions to train the agent.
 """
 import numpy as np
 
@@ -46,3 +47,13 @@ def reward_inverted_pendulum(
     )
 
     return reward
+
+def reward_target_point(
+    qpos: np.ndarray,
+    qvel: np.ndarray,
+    *,
+    target_pos: np.ndarray,
+    alpha_theta: float = 1.0,
+    alpha_pos: float = 1.0,
+):
+    pass

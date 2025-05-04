@@ -1,13 +1,12 @@
-import time
-from typing import Optional, Callable, Any
 import mujoco
 import mujoco.viewer
+import time
+from typing import Optional, Callable
 import numpy as np
 from torch import nn
 
 from .state_generators import get_pendulum_down_state
 from .reward_functions import reward_inverted_pendulum
-from .ppo_agent import test_agent
 
 
 class InvertedPendulumEnv:
@@ -15,12 +14,10 @@ class InvertedPendulumEnv:
         self,
         model_path="mujoco_environments/inverted_pendulum.xml",
         *,
-        initial_state_generator:Callable[..., np.ndarray] = get_pendulum_down_state,
         reward_generator:Callable[..., float] = reward_inverted_pendulum,
         enable_rendering: bool = True,
         delta_time: float = 0.01,
     ):
-        self.initial_state_generator = initial_state_generator
         self.reward_generator = reward_generator
         self.enable_rendering = enable_rendering
         self.model_path = model_path
@@ -67,7 +64,7 @@ class InvertedPendulumEnv:
 
     def reset(self, state: Optional[np.ndarray] = None):
         if state is None:
-            state_init = self.initial_state_generator()
+            state_init = get_pendulum_down_state(delta_theta=1e-10)
             self.data.qpos = state_init.ravel()[:2]
             self.data.qvel = state_init.ravel()[2:]
         else:
@@ -106,31 +103,6 @@ class InvertedPendulumEnv:
         return self.data.time
 
 
-def demo_cartpole_ppo(
-    actor: nn.Module,
-    critic: nn.Module,
-    num_time_steps: int = 5000, 
-    enable_rendering: bool = True,
-):
-    """
-    Run a demo of the PPO agent on the CartPole environment.
-    """
-    # Load the actor and critic
-    environment = InvertedPendulumEnv(
-        enable_rendering=enable_rendering,
-        initial_state_generator=get_pendulum_down_state,
-    )
-    environment.reset()
-    # Test the agent
-    test_agent(
-        actor=actor,
-        critic=critic,
-        env=environment,
-        num_time_steps=num_time_steps,
-    )
-
-
-
 def main(enable_rendering: bool = True):
     env = InvertedPendulumEnv(enable_rendering=enable_rendering)
     env.set_dt(0.01)
@@ -138,7 +110,7 @@ def main(enable_rendering: bool = True):
     try:
         while env.current_time < 100:
             if env.current_time > env.target_position_updated_time + 5:
-                target_pos = [np.random.rand() - 0.5, 0, 0.6]
+                target_pos = np.array([np.random.rand() - 0.5, 0, 0.6])
                 env.set_target_position(target_pos)
             ob, reward, terminated = env.step(0)
             print(f"time: {env.current_time}, reward: {reward}, ob: {ob}, terminated: {terminated}")
