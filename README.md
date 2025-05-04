@@ -45,7 +45,8 @@ pixi run -e cpu python3 main.py demo <model_path>
 - Extend to other environments (optional)
 
 ## 📚 References
-[PPE algorythms, Arxiv](https://arxiv.org/pdf/1707.06347)
-[GAE - generalized advantage estimation, Arxiv](https://arxiv.org/pdf/1506.02438)
-[Reinforcement Learning: An Introduction](http://incompleteideas.net/book/the-book-2nd.html)
-[Cart-pole dynamics, CTMS](https://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=SystemModeling)
+
+- [PPE algorythms, Arxiv](https://arxiv.org/pdf/1707.06347)
+- [GAE - generalized advantage estimation, Arxiv](https://arxiv.org/pdf/1506.02438)
+- [Reinforcement Learning: An Introduction](http://incompleteideas.net/book/the-book-2nd.html)
+- [Cart-pole dynamics, CTMS](https://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=SystemModeling)
