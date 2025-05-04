@@ -6,6 +6,9 @@ Git commit hash for the experiment: `8cacab0eabd12c17c2a86991ec937c7503eb1665`
 ## Conclusion
 
 The agent is able to maintain a vertical position for a short time (~5 seconds) but is not able to balance the pole for a long time. We need to implement a reward shaping function to improve the performance of the agent. 
+
+## Next steps
+
 - To augment the panalty due to x position and x_dot so that the agent is more stable. 
 
 
@@ -29,7 +32,7 @@ Critic:
     V: 64, 1
 ```
 
-## Loss function:
+## Reward function parameters:
 
 ```
 alpha_theta = 1.0
