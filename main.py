@@ -45,26 +45,23 @@ def demo(
     checkpoint_path: str,
     device = Hardware_manager.get_device()
 ):
-    environment = Environment(enable_rendering=True)
-    environment.reset()
     actor = Actor(state_dim=4, action_dim=1).to(device)
     critic = Critic(state_dim=4).to(device)
-    # Load the trained model
+    environment = Environment(enable_rendering=True)
     ppo_agent = PPO_agent(
         environment, actor, critic,
         train_init_state_generator=get_pendulum_random_state,
         test_init_state_generator=get_pendulum_down_state,
     )
     ppo_agent.load(checkpoint_path)
-    # Demo the agent
     ppo_agent.test(num_time_steps=12000)
 
 
 def test(checkpoint_path: str):
     # Load the trained model
-    environment = Environment(enable_rendering=False)
     actor = Actor(state_dim=4, action_dim=1)
     critic = Critic(state_dim=4)
+    environment = Environment(enable_rendering=False)
     ppo_agent = PPO_agent(
         environment, actor, critic,
         train_init_state_generator=get_pendulum_random_state,
