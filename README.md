@@ -3,17 +3,12 @@
 This repository contains a vanilla PyTorch implementation of the Proximal Policy Optimization (PPO) algorithm, applied to the classic CartPole environment.
 
 The implementation is done fully from scratch, with no reliance on high-level RL libraries, aiming for clarity and educational value.
-Status
 
-The PPO agent successfully solves the CartPole environment. Experimental results will be added as more data becomes available.
-
-Experiments logs are available at [Google Drive](https://drive.google.com/drive/folders/1Bnkoyfdk1eQ6uSAzVLb8qbUSOIi3IEF1?usp=drive_link)
-
-> ⚠️   The experiments results are being documented and will be added to this repository later this week.
+![Normalized advantages](https://drive.google.com/uc?export=view&id=1yyTquiBVBR-FroSPXF2pkwb3ID52YVp1)
 
 ## 🔬 Experiments results
 
-The experiment results can be found [here](experiments)
+The experiments notes and results can be found [here](experiments)
 
 ## 🏆 How to train a new model
 
