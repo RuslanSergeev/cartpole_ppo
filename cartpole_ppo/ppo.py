@@ -266,10 +266,10 @@ class PPO_agent:
 
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
             # optimize for num_epochs per iteration:
+            actor.train()
+            critic.train()
             for epoch in range(num_epochs):
                 for batch_idx, batch in enumerate(dataloader):
-                    actor.train()
-                    critic.train()
                     # get the new policy loss
                     loss = self._validate(**batch)
                     # Perform optimization step
