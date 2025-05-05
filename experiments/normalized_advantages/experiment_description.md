@@ -1,4 +1,4 @@
-# No tanh squashing experiment
+# No reward normalization
 
 In this experiment I've disabled reward normalization.
 The normalization instead is performed only on advantages.
