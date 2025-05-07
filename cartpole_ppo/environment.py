@@ -3,7 +3,6 @@ import mujoco.viewer
 import time
 from typing import Optional, Callable
 import numpy as np
-from torch import nn
 
 from .state_generators import get_pendulum_down_state
 from .reward_functions import reward_inverted_pendulum
