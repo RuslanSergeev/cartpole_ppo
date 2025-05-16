@@ -4,7 +4,7 @@ This repository contains a vanilla PyTorch implementation of the Proximal Policy
 
 The implementation is done fully from scratch, with no reliance on high-level RL libraries, aiming for clarity and educational value.
 
-![Cartpole PPO results](https://drive.google.com/uc?export=view&id=1bq0X2a3g7v4x5r8j6c9k2m1z4e3f3G5)
+![Cartpole PPO results](https://drive.google.com/uc?export=view&id=1bh_3He6xfmcJ8CKQfX58gg_p00JhRC75)
 
 ## 🔬 Experiments results
 
