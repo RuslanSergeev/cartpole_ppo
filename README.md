@@ -4,7 +4,7 @@ This repository contains a vanilla PyTorch implementation of the Proximal Policy
 
 The implementation is done fully from scratch, with no reliance on high-level RL libraries, aiming for clarity and educational value.
 
-![Normalized advantages](https://drive.google.com/uc?export=view&id=1XSjkCTC37FfKEpRfl4R4a-adCmjUdvTi)
+![Normalized advantages](https://drive.google.com/uc?export=view&id=1bh_3He6xfmcJ8CKQfX58gg_p00JhRC75)
 
 ## 🔬 Experiments results
 
