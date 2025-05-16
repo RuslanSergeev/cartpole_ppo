@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 from cartpole_ppo.environment import InvertedPendulumEnv as Environment
 from cartpole_ppo.actor import Actor
 from cartpole_ppo.critic import Critic
@@ -6,6 +7,7 @@ from cartpole_ppo.hardware_manager import Hardware_manager
 from cartpole_ppo.state_generators import (
     get_pendulum_down_state,
     get_pendulum_random_state,
+    get_random_target_position,
 )
 from cartpole_ppo.ppo import PPO_agent
 
@@ -45,9 +47,17 @@ def demo(
     checkpoint_path: str,
     device = Hardware_manager.get_device()
 ):
-    actor = Actor(state_dim=4, action_dim=1).to(device)
+    actor = Actor(
+        state_dim=4, 
+        action_dim=1,
+        min_log_std=-20.0,
+        max_log_std=-15.0,
+    ).to(device)
     critic = Critic(state_dim=4).to(device)
-    environment = Environment(enable_rendering=True)
+    environment = Environment(
+        enable_rendering=True,
+        target_position_generator=get_random_target_position,
+    )
     ppo_agent = PPO_agent(
         environment, actor, critic,
         train_init_state_generator=get_pendulum_random_state,

@@ -27,3 +27,31 @@ def get_pendulum_down_state(
     delta = np.random.uniform(-delta_theta, delta_theta)
     theta = np.random.choice([-np.pi+delta, np.pi+delta])
     return np.array([0.0, theta, 0.0, 0.0])
+
+
+def get_pendulum_up_state(
+    delta_theta: float = 1.0e-3,
+) -> np.ndarray:
+    """Utility function to get a state for the cartpole environment."""
+    # Pendulum up state either {-pi, pi} +/- delta_theta
+    theta = np.random.uniform(-delta_theta, delta_theta)
+    return np.array([0.0, theta, 0.0, 0.0])
+
+
+def get_random_target_position(
+    x_min: float = -0.5,
+    x_max: float = 0.5,
+    pendulum_height: float = 0.6
+) -> np.ndarray:
+    """Utility function to get a random target position for the cartpole environment."""
+    # Random target position
+    return np.array([
+        np.random.uniform(x_min, x_max),
+        0.0,
+        pendulum_height
+    ])
+
+def get_initial_target_position(pendulum_height=0.6) -> np.ndarray:
+    """Utility function to get a random target position for the cartpole environment."""
+    # Initial target position
+    return np.array([0.0, 0.0, pendulum_height])

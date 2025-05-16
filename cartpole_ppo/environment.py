@@ -4,7 +4,12 @@ import time
 from typing import Optional, Callable
 import numpy as np
 
-from .state_generators import get_pendulum_down_state
+from .state_generators import (
+    get_pendulum_down_state, 
+    get_pendulum_random_state,
+    get_initial_target_position,
+    get_random_target_position
+)
 from .reward_functions import reward_inverted_pendulum
 
 
@@ -14,14 +19,19 @@ class InvertedPendulumEnv:
         model_path="mujoco_environments/inverted_pendulum.xml",
         *,
         reward_generator:Callable[..., float] = reward_inverted_pendulum,
+        target_position_generator: Callable[..., np.ndarray] = get_initial_target_position,
         enable_rendering: bool = True,
         delta_time: float = 0.01,
+        constant_x_offset: float = 0.19,
+        target_position_update_period: float = 5.0,
     ):
         self.reward_generator = reward_generator
+        self.target_position_generator = target_position_generator
+        self.target_position_update_period = target_position_update_period
+        self.constant_x_offset = constant_x_offset
         self.enable_rendering = enable_rendering
         self.model_path = model_path
         self.init_mujoco()
-        self.target_position_updated_time = 0.0
         self.reset()
         self.set_dt(delta_time)
 
@@ -40,6 +50,7 @@ class InvertedPendulumEnv:
 
     def step(self, a):
         self.data.ctrl = a
+        self.set_target_position()
         mujoco.mj_step(self.model, self.data)
         self.sync()
         reward = self.reward_generator(self.data.qpos, self.data.qvel)
@@ -55,13 +66,25 @@ class InvertedPendulumEnv:
             self.viewer.sync()
 
     def obs(self):
-        qpos = self.data.qpos
-        qvel = self.data.qvel
+        obs_qpos = self.data.qpos.copy()
+        obs_qvel = self.data.qvel.copy()
         # Limit the theta observation to the range [-pi, pi]
-        qpos[1] = np.arctan2(np.sin(qpos[1]), np.cos(qpos[1]))
-        return np.concatenate([qpos, qvel])
+        obs_qpos[1] = np.arctan2(np.sin(obs_qpos[1]), np.cos(obs_qpos[1]))
+        if obs_qpos[1] < 30/180*np.pi and obs_qpos[1] > -30/180*np.pi:
+            self.stable_count += 1
+            if self.stable_count > 100:
+                obs_qpos[0] = (
+                    obs_qpos[0] - self.target_position[0] + self.constant_x_offset
+                )
+        else:
+            self.stable_count = 0
+        return np.concatenate([obs_qpos, obs_qvel])
 
     def reset(self, state: Optional[np.ndarray] = None):
+        self.data.time = 0.0
+        self.stable_count = 0
+        self.target_position_updated_time = 0.0
+        self.target_position = np.array([0.0, 0.0, 0.6])
         if state is None:
             state_init = get_pendulum_down_state(delta_theta=1e-10)
             self.data.qpos = state_init.ravel()[:2]
@@ -75,10 +98,18 @@ class InvertedPendulumEnv:
         """Sets simulations step"""
         self.model.opt.timestep = new_dt
 
-    def set_target_position(self, target_position: np.ndarray):
-        self.target_position = target_position
-        self.target_position_updated_time = self.current_time
-        self.draw_ball()
+    def set_target_position(
+        self, 
+        target_position: Optional[np.ndarray] = None
+    ):
+        if self.current_time > (
+            self.target_position_updated_time + self.target_position_update_period
+        ):
+            if target_position is None:
+                target_position = self.target_position_generator()
+            self.target_position = target_position
+            self.target_position_updated_time = self.current_time
+            self.draw_ball()
 
     def draw_ball(
         self, 
@@ -104,8 +135,6 @@ class InvertedPendulumEnv:
 
 def main(enable_rendering: bool = True):
     env = InvertedPendulumEnv(enable_rendering=enable_rendering)
-    env.set_dt(0.01)
-    env.reset()
     try:
         while env.current_time < 100:
             if env.current_time > env.target_position_updated_time + 5:
